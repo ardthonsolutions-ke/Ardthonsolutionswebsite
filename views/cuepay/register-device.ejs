@@ -1,0 +1,67 @@
+<%- include('../layouts/main') %>
+</head>
+<body>
+    <nav class="cuepay-nav">
+        <div class="container">
+            <a href="/cuepay/dashboard" class="text-white text-decoration-none">
+                <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+            </a>
+        </div>
+    </nav>
+    
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-6">
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-5">
+                        <h2 class="text-center mb-4">
+                            <i class="fas fa-plus-circle text-primary"></i>
+                            Register New Device
+                        </h2>
+                        
+                        <% if (error_msg.length > 0) { %>
+                            <div class="alert alert-danger"><%= error_msg %></div>
+                        <% } %>
+                        
+                        <form action="/cuepay/register-device" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Device ID *</label>
+                                <input type="text" name="device_id" class="form-control" 
+                                       placeholder="e.g., CUEPAY-001" required>
+                                <small class="text-muted">Unique identifier for your device</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Device Name *</label>
+                                <input type="text" name="device_name" class="form-control" 
+                                       placeholder="e.g., Main Hall Table 1" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Location</label>
+                                <select name="location" class="form-select">
+                                    <option value="Main Hall">Main Hall</option>
+                                    <option value="VIP Room">VIP Room</option>
+                                    <option value="Outdoor">Outdoor</option>
+                                    <option value="Bar Area">Bar Area</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Price per Game (Ksh)</label>
+                                <input type="number" name="game_price" class="form-control" 
+                                       value="10" min="1" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold">
+                                <i class="fas fa-check me-2"></i> Register Device
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
