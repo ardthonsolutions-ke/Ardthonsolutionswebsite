@@ -5,10 +5,12 @@ var app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// Home - using EJS
 app.get('/', function(req, res) {
-  res.send('<h1 style="text-align:center;margin-top:100px;font-family:Arial;">Ardthon Solutions</h1><p style="text-align:center;font-size:20px;">Connect with Ease</p><p style="text-align:center;"><a href="/test">Test Page</a></p>');
+  res.render('index', { title: 'Ardthon Solutions' });
 });
 
+// Test page - raw HTML
 app.get('/test', function(req, res) {
   res.send('<h1>Test Page Works!</h1><a href="/">Back Home</a>');
 });

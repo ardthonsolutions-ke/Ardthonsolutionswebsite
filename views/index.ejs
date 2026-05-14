@@ -1,136 +1,19 @@
-<%- include('layouts/main') %>
+<!DOCTYPE html>
+<html>
+<head>
+    <title><%= title %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <%- include('partials/header') %>
-
-    <!-- Hero -->
-    <section class="hero-section text-white text-center py-5" style="background: linear-gradient(135deg, #2563eb, #1d4ed8);">
-        <div class="container py-5">
-            <h1 class="display-3 fw-bold mb-3">Ardthon Solutions</h1>
-            <p class="lead mb-4">Connect with Ease</p>
-            <p class="mb-4">Programmable Boards • Sensors • Arduino • ESP32 • IoT Solutions</p>
-            <div>
-                <a href="/products" class="btn btn-light btn-lg me-2 rounded-pill px-4">Shop Now</a>
-                <a href="/projects" class="btn btn-outline-light btn-lg rounded-pill px-4">View Projects</a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Featured Products -->
-    <section class="py-5">
-        <div class="container">
-            <h2 class="text-center mb-5 fw-bold">Featured Products</h2>
-            <div class="row g-4">
-                <% if (featuredProducts && featuredProducts.length > 0) { %>
-                    <% featuredProducts.forEach(product => { %>
-                        <div class="col-md-3">
-                            <div class="card h-100 shadow-sm border-0 rounded-4">
-                                <div class="card-img-top bg-light" style="height:200px;display:flex;align-items:center;justify-content:center;">
-                                    <% if (product.images && product.images.length > 0 && product.images[0].url) { %>
-                                        <img src="<%= product.images[0].url %>" alt="<%= product.name %>" style="max-height:100%;max-width:100%;object-fit:contain;">
-                                    <% } else { %>
-                                        <i class="fas fa-microchip fa-4x text-muted"></i>
-                                    <% } %>
-                                </div>
-                                <div class="card-body">
-                                    <h6 class="fw-bold"><%= product.name %></h6>
-                                    <p class="text-primary fw-bold mb-2">$<%= product.price %></p>
-                                    <a href="/products/<%= product.slug %>" class="btn btn-outline-primary btn-sm w-100 rounded-pill">View Details</a>
-                                </div>
-                            </div>
-                        </div>
-                    <% }) %>
-                <% } else { %>
-                    <div class="col-12 text-center"><p>No products available yet.</p></div>
-                <% } %>
-            </div>
-            <div class="text-center mt-4">
-                <a href="/products" class="btn btn-primary rounded-pill px-5">View All Products</a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Categories -->
-    <section class="py-5 bg-light">
-        <div class="container">
-            <h2 class="text-center mb-5 fw-bold">Shop by Category</h2>
-            <div class="row g-3">
-                <div class="col-md-4"><a href="/products?category=Programmable Boards" class="text-decoration-none"><div class="card bg-primary text-white text-center p-4 rounded-4"><i class="fas fa-microchip fa-3x mb-3"></i><h5>Programmable Boards</h5></div></a></div>
-                <div class="col-md-4"><a href="/products?category=Sensors" class="text-decoration-none"><div class="card bg-success text-white text-center p-4 rounded-4"><i class="fas fa-thermometer-half fa-3x mb-3"></i><h5>Sensors</h5></div></a></div>
-                <div class="col-md-4"><a href="/products?category=Kits" class="text-decoration-none"><div class="card bg-warning text-dark text-center p-4 rounded-4"><i class="fas fa-box-open fa-3x mb-3"></i><h5>Starter Kits</h5></div></a></div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Latest Projects -->
-    <section class="py-5">
-        <div class="container">
-            <h2 class="text-center mb-5 fw-bold">Latest Projects</h2>
-            <div class="row g-4">
-                <% if (latestProjects && latestProjects.length > 0) { %>
-                    <% latestProjects.forEach(project => { %>
-                        <div class="col-md-4">
-                            <div class="card h-100 shadow-sm border-0 rounded-4">
-                                <div class="card-body">
-                                    <span class="badge bg-<%= project.status === 'Completed' ? 'success' : 'warning' %> mb-2"><%= project.status %></span>
-                                    <h5><%= project.title %></h5>
-                                    <p class="text-muted"><%= project.description ? project.description.substring(0, 100) + '...' : '' %></p>
-                                    <span class="badge bg-info"><%= project.field %></span>
-                                </div>
-                                <div class="card-footer bg-white border-0">
-                                    <a href="/projects/<%= project.slug %>" class="btn btn-outline-primary btn-sm w-100 rounded-pill">Learn More</a>
-                                </div>
-                            </div>
-                        </div>
-                    <% }) %>
-                <% } else { %>
-                    <div class="col-12 text-center"><p>No projects yet.</p></div>
-                <% } %>
-            </div>
-        </div>
-    </section>
-
-    <!-- Blog -->
-    <section class="py-5 bg-light">
-        <div class="container">
-            <h2 class="text-center mb-5 fw-bold">Latest from Blog</h2>
-            <div class="row g-4">
-                <% if (latestBlogs && latestBlogs.length > 0) { %>
-                    <% latestBlogs.forEach(blog => { %>
-                        <div class="col-md-4">
-                            <div class="card h-100 shadow-sm border-0 rounded-4">
-                                <div class="card-body">
-                                    <span class="badge bg-info mb-2"><%= blog.category %></span>
-                                    <h5><%= blog.title %></h5>
-                                    <p class="text-muted"><%= blog.excerpt ? blog.excerpt.substring(0, 100) + '...' : '' %></p>
-                                </div>
-                                <div class="card-footer bg-white border-0">
-                                    <a href="/blog/<%= blog.slug %>" class="btn btn-outline-primary btn-sm w-100 rounded-pill">Read More</a>
-                                </div>
-                            </div>
-                        </div>
-                    <% }) %>
-                <% } else { %>
-                    <div class="col-12 text-center"><p>No blog posts yet.</p></div>
-                <% } %>
-            </div>
-        </div>
-    </section>
-
-    <!-- Discord CTA -->
-    <section class="py-5 text-white text-center" style="background: #5865F2;">
-        <div class="container">
-            <i class="fab fa-discord fa-4x mb-3"></i>
-            <h2 class="fw-bold">Join Our Discord Community</h2>
-            <p class="lead mb-4">Connect with makers, get support, and share projects</p>
-            <a href="/discord" class="btn btn-light btn-lg rounded-pill px-5">Join Now</a>
-        </div>
-    </section>
-
-    <%- include('partials/footer') %>
-    <%- include('partials/whatsapp') %>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/js/main.js"></script>
+    <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;padding:100px 0;text-align:center;">
+        <h1>Ardthon Solutions</h1>
+        <p style="font-size:1.5rem;">Connect with Ease</p>
+    </div>
+    <div style="text-align:center;padding:50px;">
+        <a href="/products" style="margin:10px;">Products</a>
+        <a href="/projects" style="margin:10px;">Projects</a>
+        <a href="/blog" style="margin:10px;">Blog</a>
+        <a href="/contact" style="margin:10px;">Contact</a>
+    </div>
 </body>
 </html>
