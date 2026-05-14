@@ -1,0 +1,13 @@
+<%- include('layouts/main') %>
+</head>
+<body>
+<%- include('partials/header') %>
+<div class="container py-5">
+    <h1>Dashboard</h1>
+    <p>Welcome, <%= userData.username || userData.email %>!</p>
+    <a href="/orders/cart" class="btn btn-primary">View Cart</a>
+    <a href="/auth/logout" class="btn btn-danger">Logout</a>
+</div>
+<%- include('partials/footer') %>
+</body>
+</html>

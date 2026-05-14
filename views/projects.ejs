@@ -1,0 +1,27 @@
+<%- include('layouts/main') %>
+</head>
+<body>
+<%- include('partials/header') %>
+<div class="container py-5">
+    <h1>Projects</h1>
+    <% if (projects && projects.length > 0) { %>
+        <div class="row">
+            <% projects.forEach(function(project) { %>
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5><%= project.title %></h5>
+                            <p><%= project.field %></p>
+                            <a href="/projects/<%= project.slug %>" class="btn btn-sm btn-primary">Details</a>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    <% } else { %>
+        <p>Projects coming soon!</p>
+    <% } %>
+</div>
+<%- include('partials/footer') %>
+</body>
+</html>

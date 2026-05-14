@@ -1,0 +1,27 @@
+<%- include('layouts/main') %>
+</head>
+<body>
+<%- include('partials/header') %>
+<div class="container py-5">
+    <h1>Products</h1>
+    <% if (products && products.length > 0) { %>
+        <div class="row">
+            <% products.forEach(function(product) { %>
+                <div class="col-md-3 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5><%= product.name %></h5>
+                            <p>$<%= product.price %></p>
+                            <a href="/products/<%= product.slug %>" class="btn btn-sm btn-primary">View</a>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    <% } else { %>
+        <p>No products available yet. Check back soon!</p>
+    <% } %>
+</div>
+<%- include('partials/footer') %>
+</body>
+</html>
