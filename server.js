@@ -1,79 +1,50 @@
-require('dotenv').config();
+// server.js - NO dotenv required, hardcoded config for cPanel
 const express = require('express');
 const session = require('express-session');
 const flash = require('connect-flash');
 const path = require('path');
 const app = express();
 
-// Catch ALL uncaught errors
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
-  // Don't crash the server
-});
-
-process.on('unhandledRejection', (err) => {
-  console.error('UNHANDLED REJECTION:', err);
-  // Don't crash the server
-});
-
-// Database connection with error handling
+// ===== DATABASE CONFIG (Hardcoded for cPanel) =====
 const mysql = require('mysql2/promise');
-let db;
+const db = mysql.createPool({
+  host: '127.0.0.1',        // FORCE IPv4 - this is the key fix!
+  user: 'yxmvmjxp_ardthon',
+  password: 'YOUR_CPANEL_MYSQL_PASSWORD_HERE',  // CHANGE THIS!
+  database: 'yxmvmjxp_ardthonsolutions',
+  port: 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  charset: 'utf8mb4'
+});
 
-try {
-  db = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'yxmvmjxp_ardthon',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'yxmvmjxp_ardthonsolutions',
-    port: parseInt(process.env.DB_PORT) || 3306,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    connectTimeout: 10000,
-    charset: 'utf8mb4'
+// Test DB connection
+db.getConnection()
+  .then(conn => {
+    console.log('MySQL Connected Successfully');
+    conn.release();
+  })
+  .catch(err => {
+    console.error('MySQL Connection Error:', err.message);
+    console.log('Server will run WITHOUT database');
   });
-  
-  console.log('Database pool created');
-} catch(err) {
-  console.error('Database pool error:', err);
-}
 
-// View engine
+// ===== APP CONFIG =====
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-
-// Body parser
-app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
-
-// Static files - with proper MIME types
-app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    }
-    if (filePath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
-  }
-}));
-
-// Session
+app.use(express.json());
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'ardthon_fallback_secret_key',
+  secret: 'ardthon_secure_session_key_2024',
   resave: false,
   saveUninitialized: false,
-  cookie: { 
-    maxAge: 86400000,
-    httpOnly: true,
-    secure: false // Set to false since cPanel proxy is HTTP internally
-  }
+  cookie: { maxAge: 86400000, httpOnly: true }
 }));
-
 app.use(flash());
 
-// Make db available to all routes
+// Make db available
 app.use((req, res, next) => {
   req.db = db;
   next();
@@ -91,71 +62,60 @@ app.use((req, res, next) => {
   next();
 });
 
-// ============ ROUTES WITH TRY-CATCH ============
+// ===== HELPER: Safe DB query =====
+async function safeQuery(query, params = []) {
+  try {
+    const [result] = await db.query(query, params);
+    return result;
+  } catch(err) {
+    console.error('Query error:', err.message);
+    return [];
+  }
+}
+
+// ===== ROUTES =====
 
 // Homepage
-app.get('/', async (req, res, next) => {
-  try {
-    let featuredProducts = [];
-    let latestProjects = [];
-    let latestBlogs = [];
-    
-    if (db) {
-      try {
-        const [products] = await db.query('SELECT * FROM products WHERE featured = 1 LIMIT 8');
-        featuredProducts = products || [];
-      } catch(e) { console.error('Products query error:', e.message); }
-      
-      try {
-        const [projects] = await db.query('SELECT * FROM projects WHERE isPublished = 1 ORDER BY createdAt DESC LIMIT 3');
-        latestProjects = projects || [];
-      } catch(e) { console.error('Projects query error:', e.message); }
-      
-      try {
-        const [blogs] = await db.query("SELECT * FROM blogs WHERE status = 'published' ORDER BY createdAt DESC LIMIT 3");
-        latestBlogs = blogs || [];
-      } catch(e) { console.error('Blogs query error:', e.message); }
-    }
-    
-    // Parse JSON fields safely
-    featuredProducts.forEach(p => {
-      try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
-    });
-    latestProjects.forEach(p => {
-      try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
-    });
-    
-    res.render('index', {
-      title: 'Ardthon Solutions - Connect With Ease',
-      featuredProducts,
-      latestProjects,
-      latestBlogs
-    });
-  } catch(err) {
-    console.error('Homepage error:', err);
-    res.render('index', {
-      title: 'Ardthon Solutions',
-      featuredProducts: [],
-      latestProjects: [],
-      latestBlogs: []
-    });
-  }
+app.get('/', async (req, res) => {
+  let featuredProducts = [];
+  let latestProjects = [];
+  let latestBlogs = [];
+
+  featuredProducts = await safeQuery('SELECT * FROM products WHERE featured = 1 LIMIT 8');
+  latestProjects = await safeQuery('SELECT * FROM projects WHERE isPublished = 1 ORDER BY createdAt DESC LIMIT 3');
+  latestBlogs = await safeQuery("SELECT * FROM blogs WHERE status = 'published' ORDER BY createdAt DESC LIMIT 3");
+
+  featuredProducts.forEach(p => {
+    try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
+  });
+  latestProjects.forEach(p => {
+    try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
+  });
+
+  res.render('index', {
+    title: 'Ardthon Solutions - Connect With Ease',
+    featuredProducts,
+    latestProjects,
+    latestBlogs
+  });
 });
 
-// Static pages (NO database needed)
+// About
 app.get('/about', (req, res) => {
   res.render('about', { title: 'About Us - Ardthon Solutions' });
 });
 
+// Contact
 app.get('/contact', (req, res) => {
   res.render('contact', { title: 'Contact Us - Ardthon Solutions' });
 });
 
+// Discord
 app.get('/discord', (req, res) => {
   res.render('discord', { title: 'Join Discord - Ardthon Solutions' });
 });
 
-// Auth routes - with error handling
+// Auth pages
 app.get('/auth/login', (req, res) => {
   if (req.session.user) return res.redirect('/dashboard');
   res.render('auth/login', { title: 'Login - Ardthon Solutions' });
@@ -166,202 +126,15 @@ app.get('/auth/register', (req, res) => {
   res.render('auth/register', { title: 'Register - Ardthon Solutions' });
 });
 
-// Products page
-app.get('/products', async (req, res) => {
-  try {
-    let products = [];
-    let categories = [];
-    
-    if (db) {
-      try {
-        const [prodResult] = await db.query('SELECT * FROM products ORDER BY createdAt DESC');
-        products = prodResult || [];
-      } catch(e) { console.error('Products error:', e.message); }
-      
-      try {
-        const [catResult] = await db.query('SELECT DISTINCT category FROM products');
-        categories = (catResult || []).map(c => c.category);
-      } catch(e) { console.error('Categories error:', e.message); }
-    }
-    
-    products.forEach(p => {
-      try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
-    });
-    
-    res.render('products', {
-      title: 'Products - Ardthon Solutions',
-      products,
-      categories,
-      currentCategory: req.query.category || '',
-      searchQuery: req.query.search || ''
-    });
-  } catch(err) {
-    console.error('Products page error:', err);
-    res.render('products', {
-      title: 'Products',
-      products: [],
-      categories: [],
-      currentCategory: '',
-      searchQuery: ''
-    });
-  }
-});
-
-// Single product
-app.get('/products/:slug', async (req, res) => {
-  try {
-    if (!db) {
-      req.flash('error_msg', 'Database not available');
-      return res.redirect('/products');
-    }
-    
-    const [products] = await db.query('SELECT * FROM products WHERE slug = ?', [req.params.slug]);
-    
-    if (!products || products.length === 0) {
-      req.flash('error_msg', 'Product not found');
-      return res.redirect('/products');
-    }
-    
-    const product = products[0];
-    try { product.images = JSON.parse(product.images || '[]'); } catch(e) { product.images = []; }
-    try { product.specifications = JSON.parse(product.specifications || '[]'); } catch(e) { product.specifications = []; }
-    
-    res.render('product-detail', {
-      title: `${product.name} - Ardthon Solutions`,
-      product,
-      relatedProducts: []
-    });
-  } catch(err) {
-    console.error('Product detail error:', err);
-    res.redirect('/products');
-  }
-});
-
-// Projects page
-app.get('/projects', async (req, res) => {
-  try {
-    let projects = [];
-    let fields = [];
-    
-    if (db) {
-      try {
-        const [projResult] = await db.query('SELECT * FROM projects WHERE isPublished = 1 ORDER BY createdAt DESC');
-        projects = projResult || [];
-      } catch(e) { console.error('Projects error:', e.message); }
-      
-      try {
-        const [fieldResult] = await db.query('SELECT DISTINCT field FROM projects WHERE isPublished = 1');
-        fields = (fieldResult || []).map(f => f.field);
-      } catch(e) { console.error('Fields error:', e.message); }
-    }
-    
-    projects.forEach(p => {
-      try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
-    });
-    
-    res.render('projects', {
-      title: 'Projects - Ardthon Solutions',
-      projects,
-      fields,
-      currentField: req.query.field || ''
-    });
-  } catch(err) {
-    console.error('Projects page error:', err);
-    res.render('projects', { title: 'Projects', projects: [], fields: [], currentField: '' });
-  }
-});
-
-// Single project
-app.get('/projects/:slug', async (req, res) => {
-  try {
-    if (!db) {
-      req.flash('error_msg', 'Database not available');
-      return res.redirect('/projects');
-    }
-    
-    const [projects] = await db.query(
-      'SELECT * FROM projects WHERE slug = ? AND isPublished = 1',
-      [req.params.slug]
-    );
-    
-    if (!projects || projects.length === 0) {
-      req.flash('error_msg', 'Project not found');
-      return res.redirect('/projects');
-    }
-    
-    const project = projects[0];
-    try { project.images = JSON.parse(project.images || '[]'); } catch(e) { project.images = []; }
-    try { project.technologies = JSON.parse(project.technologies || '[]'); } catch(e) { project.technologies = []; }
-    
-    // If CuePay project
-    if (project.slug === 'cuepay-pool-automation') {
-      return res.render('projects-cuepay', {
-        title: 'CuePay - Pool Automation - Ardthon Solutions',
-        project
-      });
-    }
-    
-    res.render('project-detail', {
-      title: `${project.title} - Ardthon Solutions`,
-      project
-    });
-  } catch(err) {
-    console.error('Project detail error:', err);
-    res.redirect('/projects');
-  }
-});
-
-// Blog page
-app.get('/blog', async (req, res) => {
-  try {
-    let blogs = [];
-    if (db) {
-      try {
-        const [blogResult] = await db.query(
-          "SELECT b.*, u.username FROM blogs b LEFT JOIN users u ON b.authorId = u.id WHERE b.status = 'published' ORDER BY b.createdAt DESC"
-        );
-        blogs = blogResult || [];
-      } catch(e) { console.error('Blog error:', e.message); }
-    }
-    
-    res.render('blog', { title: 'Blog - Ardthon Solutions', blogs });
-  } catch(err) {
-    console.error('Blog page error:', err);
-    res.render('blog', { title: 'Blog', blogs: [] });
-  }
-});
-
-// Dashboard (must work even without DB)
-app.get('/dashboard', (req, res) => {
-  if (!req.session.user) return res.redirect('/auth/login');
-  res.render('dashboard', {
-    title: 'Dashboard - Ardthon Solutions',
-    orders: [],
-    userData: req.session.user
-  });
-});
-
-// Cart
-app.get('/orders/cart', (req, res) => {
-  const cart = req.session.cart || [];
-  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  res.render('cart', { title: 'Cart - Ardthon Solutions', cart, total });
-});
-
-// Login handler
+// Login POST
 app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    if (!db) {
-      req.flash('error_msg', 'System temporarily unavailable');
-      return res.redirect('/auth/login');
-    }
-    
     const bcrypt = require('bcryptjs');
-    const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     
-    if (!users || users.length === 0) {
+    const users = await safeQuery('SELECT * FROM users WHERE email = ?', [email]);
+    
+    if (users.length === 0) {
       req.flash('error_msg', 'Invalid email or password');
       return res.redirect('/auth/login');
     }
@@ -378,22 +151,230 @@ app.post('/auth/login', async (req, res) => {
       id: user.id,
       username: user.username,
       email: user.email,
-      role: user.role
+      role: user.role,
+      fullName: user.fullName
     };
     
+    req.flash('success_msg', 'Welcome back!');
     res.redirect('/dashboard');
   } catch(err) {
     console.error('Login error:', err);
-    req.flash('error_msg', 'Login failed. Please try again.');
+    req.flash('error_msg', 'Login failed');
     res.redirect('/auth/login');
+  }
+});
+
+// Register POST
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { username, email, password, password2, fullName } = req.body;
+    const bcrypt = require('bcryptjs');
+    
+    if (password !== password2) {
+      req.flash('error_msg', 'Passwords do not match');
+      return res.redirect('/auth/register');
+    }
+    
+    const existing = await safeQuery('SELECT id FROM users WHERE email = ? OR username = ?', [email, username]);
+    
+    if (existing.length > 0) {
+      req.flash('error_msg', 'Email or username already registered');
+      return res.redirect('/auth/register');
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    await db.query(
+      "INSERT INTO users (username, email, password, fullName, role) VALUES (?, ?, ?, ?, 'customer')",
+      [username, email, hashedPassword, fullName || '']
+    );
+    
+    req.flash('success_msg', 'Registration successful! Please login.');
+    res.redirect('/auth/login');
+  } catch(err) {
+    console.error('Register error:', err);
+    req.flash('error_msg', 'Registration failed');
+    res.redirect('/auth/register');
   }
 });
 
 // Logout
 app.get('/auth/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.redirect('/');
+  req.session.destroy(() => res.redirect('/'));
+});
+
+// Dashboard
+app.get('/dashboard', (req, res) => {
+  if (!req.session.user) return res.redirect('/auth/login');
+  res.render('dashboard', {
+    title: 'Dashboard - Ardthon Solutions',
+    orders: [],
+    userData: req.session.user
   });
+});
+
+// Products
+app.get('/products', async (req, res) => {
+  const products = await safeQuery('SELECT * FROM products ORDER BY createdAt DESC');
+  const categories = await safeQuery('SELECT DISTINCT category FROM products');
+  
+  products.forEach(p => {
+    try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
+  });
+
+  res.render('products', {
+    title: 'Products - Ardthon Solutions',
+    products,
+    categories: categories.map(c => c.category),
+    currentCategory: req.query.category || '',
+    searchQuery: req.query.search || ''
+  });
+});
+
+// Product detail
+app.get('/products/:slug', async (req, res) => {
+  const products = await safeQuery('SELECT * FROM products WHERE slug = ?', [req.params.slug]);
+  
+  if (products.length === 0) {
+    req.flash('error_msg', 'Product not found');
+    return res.redirect('/products');
+  }
+  
+  const product = products[0];
+  try { product.images = JSON.parse(product.images || '[]'); } catch(e) { product.images = []; }
+  try { product.specifications = JSON.parse(product.specifications || '[]'); } catch(e) { product.specifications = []; }
+  
+  res.render('product-detail', {
+    title: product.name + ' - Ardthon Solutions',
+    product,
+    relatedProducts: []
+  });
+});
+
+// Projects
+app.get('/projects', async (req, res) => {
+  const projects = await safeQuery('SELECT * FROM projects WHERE isPublished = 1 ORDER BY createdAt DESC');
+  const fields = await safeQuery('SELECT DISTINCT field FROM projects WHERE isPublished = 1');
+  
+  projects.forEach(p => {
+    try { p.images = JSON.parse(p.images || '[]'); } catch(e) { p.images = []; }
+    try { p.technologies = JSON.parse(p.technologies || '[]'); } catch(e) { p.technologies = []; }
+  });
+
+  res.render('projects', {
+    title: 'Projects - Ardthon Solutions',
+    projects,
+    fields: fields.map(f => f.field),
+    currentField: req.query.field || ''
+  });
+});
+
+// Project detail
+app.get('/projects/:slug', async (req, res) => {
+  const projects = await safeQuery(
+    'SELECT * FROM projects WHERE slug = ? AND isPublished = 1',
+    [req.params.slug]
+  );
+  
+  if (projects.length === 0) {
+    req.flash('error_msg', 'Project not found');
+    return res.redirect('/projects');
+  }
+  
+  const project = projects[0];
+  try { project.images = JSON.parse(project.images || '[]'); } catch(e) { project.images = []; }
+  try { project.technologies = JSON.parse(project.technologies || '[]'); } catch(e) { project.technologies = []; }
+  try { project.features = JSON.parse(project.features || '[]'); } catch(e) { project.features = []; }
+  
+  if (project.slug === 'cuepay-pool-automation') {
+    return res.render('projects-cuepay', {
+      title: 'CuePay - Pool Automation',
+      project
+    });
+  }
+  
+  res.render('project-detail', {
+    title: project.title + ' - Ardthon Solutions',
+    project
+  });
+});
+
+// Blog
+app.get('/blog', async (req, res) => {
+  const blogs = await safeQuery(
+    "SELECT b.*, u.username FROM blogs b LEFT JOIN users u ON b.authorId = u.id WHERE b.status = 'published' ORDER BY b.createdAt DESC"
+  );
+  res.render('blog', { title: 'Blog - Ardthon Solutions', blogs });
+});
+
+// Blog detail
+app.get('/blog/:slug', async (req, res) => {
+  const blogs = await safeQuery(
+    "SELECT b.*, u.username FROM blogs b LEFT JOIN users u ON b.authorId = u.id WHERE b.slug = ? AND b.status = 'published'",
+    [req.params.slug]
+  );
+  
+  if (blogs.length === 0) {
+    req.flash('error_msg', 'Blog post not found');
+    return res.redirect('/blog');
+  }
+  
+  await db.query('UPDATE blogs SET views = views + 1 WHERE id = ?', [blogs[0].id]);
+  
+  res.render('blog-detail', {
+    title: blogs[0].title + ' - Ardthon Solutions',
+    blog: blogs[0]
+  });
+});
+
+// Cart
+app.get('/orders/cart', (req, res) => {
+  const cart = req.session.cart || [];
+  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  res.render('cart', { title: 'Cart - Ardthon Solutions', cart, total });
+});
+
+// Add to cart
+app.post('/products/add-to-cart/:id', async (req, res) => {
+  const products = await safeQuery('SELECT * FROM products WHERE id = ?', [req.params.id]);
+  if (products.length === 0) return res.status(404).json({ error: 'Not found' });
+  
+  const product = products[0];
+  try { product.images = JSON.parse(product.images || '[]'); } catch(e) { product.images = []; }
+  
+  if (!req.session.cart) req.session.cart = [];
+  
+  const existing = req.session.cart.find(item => item.product == req.params.id);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    req.session.cart.push({
+      product: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.images[0]?.url || '/images/placeholder.jpg',
+      quantity: 1
+    });
+  }
+  
+  res.json({ success: true, cartCount: req.session.cart.length });
+});
+
+// CuePay pages
+app.get('/cuepay/login', (req, res) => {
+  res.render('cuepay/login', { title: 'CuePay Login' });
+});
+
+app.get('/cuepay/dashboard', (req, res) => {
+  res.render('cuepay/dashboard', {
+    title: 'CuePay Dashboard',
+    devices: [],
+    user: { name: 'User' }
+  });
+});
+
+app.get('/cuepay/register-device', (req, res) => {
+  res.render('cuepay/register-device', { title: 'Register Device' });
 });
 
 // 404
@@ -403,17 +384,20 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('FINAL ERROR HANDLER:', err.message);
-  res.status(500).send('<h1>500 - Server Error</h1><p>Please try again later.</p><a href="/">Go Home</a>');
+  console.error('ERROR:', err.message);
+  res.status(500).render('error', {
+    title: 'Error',
+    message: 'Something went wrong',
+    error: {}
+  });
 });
 
+// ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
-  console.log(`Test: http://localhost:${PORT}/`);
-});
-
-// Handle server errors
-server.on('error', (err) => {
-  console.error('Server error:', err);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('========================================');
+  console.log('Ardthon Solutions Server Running');
+  console.log('Port: ' + PORT);
+  console.log('URL: http://localhost:' + PORT);
+  console.log('========================================');
 });
