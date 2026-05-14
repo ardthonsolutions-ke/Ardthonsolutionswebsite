@@ -9,8 +9,8 @@ const app = express();
 const mysql = require('mysql2/promise');
 const db = mysql.createPool({
   host: '127.0.0.1',        // FORCE IPv4 - this is the key fix!
-  user: 'yxmvmjxp_ardthon',
-  password: 'YOUR_CPANEL_MYSQL_PASSWORD_HERE',  // CHANGE THIS!
+  user: 'yxmvmjxp_ardthonuser',
+  password: 'Ardthonuser254',  // CHANGE THIS!
   database: 'yxmvmjxp_ardthonsolutions',
   port: 3306,
   waitForConnections: true,
