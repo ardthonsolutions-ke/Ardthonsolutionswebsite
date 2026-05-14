@@ -1,0 +1,42 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top shadow-sm">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-primary" href="/">
+            <i class="fas fa-microchip me-2"></i>Ardthon<span class="text-warning">Solutions</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mx-auto">
+                <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+                <li class="nav-item"><a class="nav-link" href="/products">Products</a></li>
+                <li class="nav-item"><a class="nav-link" href="/projects">Projects</a></li>
+                <li class="nav-item"><a class="nav-link" href="/blog">Blog</a></li>
+                <li class="nav-item"><a class="nav-link" href="/discord">Discord</a></li>
+                <li class="nav-item"><a class="nav-link" href="/about">About</a></li>
+                <li class="nav-item"><a class="nav-link" href="/contact">Contact</a></li>
+            </ul>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/orders/cart" class="btn btn-outline-primary btn-sm position-relative">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span class="cart-badge" id="cartBadge" style="display:<%= cartCount > 0 ? 'inline' : 'none' %>"><%= cartCount %></span>
+                </a>
+                <% if (user) { %>
+                    <div class="dropdown">
+                        <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="fas fa-user me-1"></i><%= user.username %>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="/dashboard">Dashboard</a></li>
+                            <li><a class="dropdown-item" href="/auth/logout">Logout</a></li>
+                        </ul>
+                    </div>
+                <% } else { %>
+                    <a href="/auth/login" class="btn btn-outline-primary btn-sm">Login</a>
+                    <a href="/auth/register" class="btn btn-primary btn-sm">Register</a>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</nav>
+<div style="padding-top: 76px;"></div>
