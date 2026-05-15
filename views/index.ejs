@@ -1,19 +1,140 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title><%= title %></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<%- include('layouts/main') %>
 </head>
 <body>
-    <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;padding:100px 0;text-align:center;">
+<%- include('partials/header') %>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="container">
         <h1>Ardthon Solutions</h1>
-        <p style="font-size:1.5rem;">Connect with Ease</p>
+        <p>Connect with Ease</p>
+        <p style="margin-bottom:30px;">Programmable Boards • Sensors • Arduino • ESP32 • IoT Solutions</p>
+        <div>
+            <a href="/products" class="btn btn-light btn-lg me-2">Shop Now</a>
+            <a href="/projects" class="btn btn-outline-light btn-lg">View Projects</a>
+        </div>
     </div>
-    <div style="text-align:center;padding:50px;">
-        <a href="/products" style="margin:10px;">Products</a>
-        <a href="/projects" style="margin:10px;">Projects</a>
-        <a href="/blog" style="margin:10px;">Blog</a>
-        <a href="/contact" style="margin:10px;">Contact</a>
+</section>
+
+<!-- Featured Products -->
+<% if (featuredProducts && featuredProducts.length > 0) { %>
+<section class="section">
+    <div class="container">
+        <div class="section-title"><h2>Featured Products</h2></div>
+        <div class="row">
+            <% featuredProducts.forEach(function(product) { %>
+                <div class="col-md-3">
+                    <div class="card product-card">
+                        <div class="card-body text-center">
+                            <% if (product.images && product.images[0]) { %>
+                                <img src="<%= product.images[0].url %>" alt="<%= product.name %>" style="height:150px;object-fit:contain;margin-bottom:15px;">
+                            <% } %>
+                            <h5><%= product.name %></h5>
+                            <p class="text-muted"><%= product.category %></p>
+                            <p class="price">$<%= product.price %></p>
+                            <a href="/products/<%= product.slug %>" class="btn btn-outline-primary btn-sm">View</a>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+        <div class="text-center mt-4">
+            <a href="/products" class="btn btn-primary">View All Products</a>
+        </div>
     </div>
+</section>
+<% } %>
+
+<!-- Categories -->
+<section class="section" style="background:#f1f5f9;">
+    <div class="container">
+        <div class="section-title"><h2>Shop by Category</h2></div>
+        <div class="row">
+            <div class="col-md-4">
+                <a href="/products?category=Programmable Boards" style="text-decoration:none;">
+                    <div class="card" style="text-align:center;padding:30px;background:var(--primary);color:white;">
+                        <i class="fas fa-microchip fa-3x mb-3"></i>
+                        <h5>Programmable Boards</h5>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="/products?category=Sensors" style="text-decoration:none;">
+                    <div class="card" style="text-align:center;padding:30px;background:var(--success);color:white;">
+                        <i class="fas fa-thermometer-half fa-3x mb-3"></i>
+                        <h5>Sensors</h5>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="/products?category=Kits" style="text-decoration:none;">
+                    <div class="card" style="text-align:center;padding:30px;background:var(--accent);color:var(--dark);">
+                        <i class="fas fa-box-open fa-3x mb-3"></i>
+                        <h5>Starter Kits</h5>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Latest Projects -->
+<% if (latestProjects && latestProjects.length > 0) { %>
+<section class="section">
+    <div class="container">
+        <div class="section-title"><h2>Latest Projects</h2></div>
+        <div class="row">
+            <% latestProjects.forEach(function(project) { %>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <span class="badge badge-<%= project.status === 'Completed' ? 'success' : 'warning' %> mb-2"><%= project.status %></span>
+                            <h5><%= project.title %></h5>
+                            <p class="text-muted"><%= project.field %></p>
+                            <a href="/projects/<%= project.slug %>" class="btn btn-outline-primary btn-sm">Learn More</a>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    </div>
+</section>
+<% } %>
+
+<!-- Latest Blogs -->
+<% if (latestBlogs && latestBlogs.length > 0) { %>
+<section class="section" style="background:#f1f5f9;">
+    <div class="container">
+        <div class="section-title"><h2>Latest from Blog</h2></div>
+        <div class="row">
+            <% latestBlogs.forEach(function(blog) { %>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <span class="badge badge-primary mb-2"><%= blog.category %></span>
+                            <h5><%= blog.title %></h5>
+                            <a href="/blog/<%= blog.slug %>" class="btn btn-outline-primary btn-sm">Read More</a>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    </div>
+</section>
+<% } %>
+
+<!-- Discord CTA -->
+<section class="section" style="background:#5865F2;color:white;text-align:center;">
+    <div class="container">
+        <i class="fab fa-discord fa-4x mb-3"></i>
+        <h2>Join Our Discord Community</h2>
+        <p style="margin-bottom:25px;">Connect with makers, get support, and share projects</p>
+        <a href="/discord" class="btn btn-light btn-lg">Join Now</a>
+    </div>
+</section>
+
+<%- include('partials/footer') %>
+<%- include('partials/whatsapp') %>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
