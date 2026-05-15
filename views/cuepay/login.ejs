@@ -16,24 +16,10 @@
   max-width: 460px;
   width: 100%;
 }
-.cuepay-logo {
-  text-align: center;
-  margin-bottom: 35px;
-}
-.cuepay-logo i {
-  font-size: 4rem;
-  color: #0ea5e9;
-  margin-bottom: 10px;
-}
-.cuepay-logo h2 {
-  font-weight: 800;
-  color: #1e293b;
-  margin: 0;
-}
-.cuepay-logo p {
-  color: #64748b;
-  margin: 5px 0 0;
-}
+.cuepay-logo { text-align: center; margin-bottom: 35px; }
+.cuepay-logo i { font-size: 4rem; color: #0ea5e9; margin-bottom: 10px; }
+.cuepay-logo h2 { font-weight: 800; color: #1e293b; margin: 0; }
+.cuepay-logo p { color: #64748b; margin: 5px 0 0; }
 </style>
 </head>
 <body>
@@ -44,14 +30,12 @@
       <h2>CuePay</h2>
       <p>Pool Automation System</p>
     </div>
-
-    <% if (success_msg && success_msg.length > 0) { %>
+    <% if (typeof success_msg !== 'undefined' && success_msg && success_msg.length > 0) { %>
       <div class="alert alert-success"><%= success_msg %></div>
     <% } %>
-    <% if (error_msg && error_msg.length > 0) { %>
+    <% if (typeof error_msg !== 'undefined' && error_msg && error_msg.length > 0) { %>
       <div class="alert alert-danger"><%= error_msg %></div>
     <% } %>
-
     <form action="/cuepay/login" method="POST">
       <div class="mb-3">
         <label class="form-label">Email</label>
@@ -65,7 +49,6 @@
         <i class="fas fa-sign-in-alt me-2"></i> Login to CuePay
       </button>
     </form>
-
     <div class="text-center mt-3">
       <p>Don't have an account? <a href="/cuepay/register" style="color:#0ea5e9;font-weight:600;">Register here</a></p>
       <a href="/" class="text-muted" style="font-size:0.9rem;">← Back to Ardthon Solutions</a>

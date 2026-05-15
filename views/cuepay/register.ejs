@@ -26,11 +26,9 @@
       <h2 class="fw-bold mt-2">Create CuePay Account</h2>
       <p class="text-muted">Register to manage your pool tables</p>
     </div>
-
-    <% if (error_msg && error_msg.length > 0) { %>
+    <% if (typeof error_msg !== 'undefined' && error_msg && error_msg.length > 0) { %>
       <div class="alert alert-danger"><%= error_msg %></div>
     <% } %>
-
     <form action="/cuepay/register" method="POST">
       <div class="mb-3">
         <label class="form-label">Full Name</label>
@@ -60,7 +58,6 @@
         Create Account
       </button>
     </form>
-
     <div class="text-center mt-3">
       <p>Already have an account? <a href="/cuepay/login" style="color:#0ea5e9;">Login</a></p>
     </div>
