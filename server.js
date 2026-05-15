@@ -837,7 +837,7 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
        WHERE device_id = ?`,
       [
         data.battery_voltage || 0,
-        data.gsm_connected || false,
+        data.gsm_connected ? 1 : 0,
         data.games_available || 0,
         data.total_revenue || 0,
         data.today_revenue || 0,
