@@ -483,6 +483,418 @@ app.get('/cuepay/register-device', (req, res) => {
   res.render('cuepay/register-device', { title: 'Register CuePay Device' });
 });
 
+// ============================================
+// CUEPAY COMPLETE SYSTEM
+// ============================================
+
+const crypto = require('crypto');
+
+// Generate unique API key
+function generateApiKey() {
+  return 'CP-' + crypto.randomBytes(16).toString('hex');
+}
+
+// CuePay middleware
+function isCuePayAuth(req, res, next) {
+  if (req.session.cuepayUser) return next();
+  req.flash('error_msg', 'Please login to CuePay first');
+  res.redirect('/cuepay/login');
+}
+
+// CuePay device API auth middleware
+async function validateDeviceApiKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+  const deviceId = req.headers['x-device-id'];
+  
+  if (!apiKey || !deviceId) {
+    return res.status(401).json({ error: 'Missing credentials. Send x-api-key and x-device-id headers' });
+  }
+  
+  try {
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE device_id = ? AND api_key = ?',
+      [deviceId, apiKey]
+    );
+    
+    if (devices.length === 0) {
+      return res.status(401).json({ error: 'Invalid device credentials' });
+    }
+    
+    req.cuepayDevice = devices[0];
+    next();
+  } catch(err) {
+    res.status(500).json({ error: 'Authentication error' });
+  }
+}
+
+// ===== CUEPAY WEB PAGES =====
+
+// CuePay main landing page
+app.get('/cuepay', (req, res) => {
+  res.render('cuepay/login', { title: 'CuePay - Pool Automation System' });
+});
+
+// CuePay Login page
+app.get('/cuepay/login', (req, res) => {
+  if (req.session.cuepayUser) return res.redirect('/cuepay/dashboard');
+  res.render('cuepay/login', { title: 'CuePay Login - Ardthon Solutions' });
+});
+
+// CuePay Login handler
+app.post('/cuepay/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const bcrypt = require('bcryptjs');
+    
+    const [users] = await db.query('SELECT * FROM cuepay_users WHERE email = ? AND is_active = 1', [email]);
+    
+    if (users.length === 0) {
+      req.flash('error_msg', 'Invalid CuePay credentials');
+      return res.redirect('/cuepay/login');
+    }
+    
+    const user = users[0];
+    const match = await bcrypt.compare(password, user.password);
+    
+    if (!match) {
+      req.flash('error_msg', 'Invalid CuePay credentials');
+      return res.redirect('/cuepay/login');
+    }
+    
+    req.session.cuepayUser = {
+      id: user.id,
+      email: user.email,
+      name: user.full_name,
+      business: user.business_name
+    };
+    
+    req.flash('success_msg', 'Welcome to CuePay!');
+    res.redirect('/cuepay/dashboard');
+  } catch(err) {
+    console.error('CuePay login error:', err);
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/cuepay/login');
+  }
+});
+
+// CuePay Register page
+app.get('/cuepay/register', (req, res) => {
+  if (req.session.cuepayUser) return res.redirect('/cuepay/dashboard');
+  res.render('cuepay/register', { title: 'Create CuePay Account' });
+});
+
+// CuePay Register handler
+app.post('/cuepay/register', async (req, res) => {
+  try {
+    const { email, password, password2, full_name, business_name, phone } = req.body;
+    const bcrypt = require('bcryptjs');
+    
+    if (password !== password2) {
+      req.flash('error_msg', 'Passwords do not match');
+      return res.redirect('/cuepay/register');
+    }
+    
+    if (password.length < 6) {
+      req.flash('error_msg', 'Password must be at least 6 characters');
+      return res.redirect('/cuepay/register');
+    }
+    
+    const [existing] = await db.query('SELECT id FROM cuepay_users WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      req.flash('error_msg', 'Email already registered');
+      return res.redirect('/cuepay/register');
+    }
+    
+    const hash = await bcrypt.hash(password, 10);
+    await db.query(
+      'INSERT INTO cuepay_users (email, password, full_name, business_name, phone) VALUES (?, ?, ?, ?, ?)',
+      [email, hash, full_name || '', business_name || '', phone || '']
+    );
+    
+    req.flash('success_msg', 'CuePay account created! Please login.');
+    res.redirect('/cuepay/login');
+  } catch(err) {
+    console.error('CuePay register error:', err);
+    req.flash('error_msg', 'Registration failed');
+    res.redirect('/cuepay/register');
+  }
+});
+
+// CuePay Logout
+app.get('/cuepay/logout', (req, res) => {
+  delete req.session.cuepayUser;
+  res.redirect('/cuepay/login');
+});
+
+// CuePay Dashboard (requires auth)
+app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+    
+    // Calculate battery percentage and time ago for each device
+    devices.forEach(device => {
+      device.battery_percent = device.battery_voltage ? 
+        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
+      device.is_online = device.status === 'online';
+    });
+    
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard - Ardthon Solutions',
+      devices,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    console.error('CuePay dashboard error:', err);
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard',
+      devices: [],
+      user: req.session.cuepayUser
+    });
+  }
+});
+
+// Register new device page
+app.get('/cuepay/register-device', isCuePayAuth, (req, res) => {
+  res.render('cuepay/register-device', { title: 'Register New CuePay Device' });
+});
+
+// Register new device handler
+app.post('/cuepay/register-device', isCuePayAuth, async (req, res) => {
+  try {
+    const { device_name, location, game_price } = req.body;
+    const ownerId = req.session.cuepayUser.id;
+    
+    // Generate unique device ID and API key
+    const deviceId = 'CUEPAY-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+    const apiKey = generateApiKey();
+    
+    await db.query(
+      `INSERT INTO cuepay_devices (device_id, device_name, api_key, owner_id, location_area, game_price, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'offline')`,
+      [deviceId, device_name, apiKey, ownerId, location, game_price || 10]
+    );
+    
+    // Store credentials in session to show once
+    req.session.newDevice = {
+      device_id: deviceId,
+      device_name: device_name,
+      api_key: apiKey
+    };
+    
+    req.flash('success_msg', 'Device registered successfully!');
+    res.redirect('/cuepay/device-credentials');
+  } catch(err) {
+    console.error('Device registration error:', err);
+    req.flash('error_msg', 'Failed to register device');
+    res.redirect('/cuepay/register-device');
+  }
+});
+
+// Device credentials page (shown once after registration)
+app.get('/cuepay/device-credentials', isCuePayAuth, (req, res) => {
+  const device = req.session.newDevice;
+  if (!device) return res.redirect('/cuepay/dashboard');
+  
+  // Clear from session after showing
+  delete req.session.newDevice;
+  
+  res.render('cuepay/device-credentials', {
+    title: 'Device Credentials - CuePay',
+    device
+  });
+});
+
+// Device detail page
+app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const { deviceId } = req.params;
+    
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
+      [deviceId, userId]
+    );
+    
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Device not found');
+      return res.redirect('/cuepay/dashboard');
+    }
+    
+    const device = devices[0];
+    device.battery_percent = device.battery_voltage ? 
+      Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+    device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
+    
+    // Get recent payments
+    const [payments] = await db.query(
+      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
+      [deviceId]
+    );
+    
+    // Get pending commands
+    const [commands] = await db.query(
+      "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10",
+      [deviceId]
+    );
+    
+    res.render('cuepay/device-detail', {
+      title: `${device.device_name} - CuePay`,
+      device,
+      payments,
+      commands
+    });
+  } catch(err) {
+    console.error('Device detail error:', err);
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// Send command to device
+app.post('/cuepay/device/:deviceId/command', isCuePayAuth, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const { command_type, command_value } = req.body;
+    
+    // Verify device belongs to user
+    const [devices] = await db.query(
+      'SELECT id FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
+      [deviceId, req.session.cuepayUser.id]
+    );
+    
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Device not found');
+      return res.redirect('/cuepay/dashboard');
+    }
+    
+    // Insert command
+    await db.query(
+      "INSERT INTO cuepay_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
+      [deviceId, command_type, command_value]
+    );
+    
+    // If command is change_price, update the device price immediately
+    if (command_type === 'change_price') {
+      await db.query(
+        'UPDATE cuepay_devices SET game_price = ? WHERE device_id = ?',
+        [parseFloat(command_value), deviceId]
+      );
+    }
+    
+    req.flash('success_msg', `Command "${command_type}" sent successfully! Device will update on next sync.`);
+    res.redirect(`/cuepay/device/${deviceId}`);
+  } catch(err) {
+    console.error('Command error:', err);
+    req.flash('error_msg', 'Failed to send command');
+    res.redirect(`/cuepay/device/${req.params.deviceId}`);
+  }
+});
+
+// ===== CUEPAY API ENDPOINTS (For ESP32 devices) =====
+
+// Device sync endpoint - Called by ESP32
+app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
+  try {
+    const device = req.cuepayDevice;
+    const data = req.body;
+    
+    // Update device live data
+    await db.query(
+      `UPDATE cuepay_devices SET 
+        status = 'online',
+        battery_voltage = ?,
+        gsm_connected = ?,
+        games_available = ?,
+        total_revenue = ?,
+        today_revenue = ?,
+        today_games = ?,
+        last_sync = NOW()
+       WHERE device_id = ?`,
+      [
+        data.battery_voltage || 0,
+        data.gsm_connected || false,
+        data.games_available || 0,
+        data.total_revenue || 0,
+        data.today_revenue || 0,
+        data.today_games || 0,
+        device.device_id
+      ]
+    );
+    
+    // Save payments
+    if (data.recent_payments && Array.isArray(data.recent_payments)) {
+      for (const payment of data.recent_payments) {
+        if (payment.transaction_id) {
+          await db.query(
+            `INSERT IGNORE INTO cuepay_payments (device_id, transaction_id, amount, customer_number, games_earned)
+             VALUES (?, ?, ?, ?, ?)`,
+            [device.device_id, payment.transaction_id, payment.amount, payment.customer, payment.games]
+          );
+        }
+      }
+    }
+    
+    // Get pending commands
+    const [commands] = await db.query(
+      "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
+      [device.device_id]
+    );
+    
+    // Mark commands as sent
+    if (commands.length > 0) {
+      const commandIds = commands.map(c => c.id);
+      await db.query(
+        "UPDATE cuepay_commands SET status = 'sent' WHERE id IN (?)",
+        [commandIds]
+      );
+    }
+    
+    // Get current device settings
+    const [currentDevice] = await db.query(
+      'SELECT game_price FROM cuepay_devices WHERE device_id = ?',
+      [device.device_id]
+    );
+    
+    res.json({
+      status: 'success',
+      message: 'Sync complete',
+      timestamp: new Date().toISOString(),
+      commands: commands.map(c => ({
+        type: c.command_type,
+        value: c.command_value
+      })),
+      current_price: currentDevice[0]?.game_price || 10
+    });
+  } catch(err) {
+    console.error('CuePay sync error:', err);
+    res.status(500).json({ error: 'Sync failed' });
+  }
+});
+
+// Get device status (for device to check if it should be online)
+app.get('/cuepay/api/device-status', validateDeviceApiKey, async (req, res) => {
+  const [commands] = await db.query(
+    "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
+    [req.cuepayDevice.device_id]
+  );
+  
+  const [device] = await db.query(
+    'SELECT game_price FROM cuepay_devices WHERE device_id = ?',
+    [req.cuepayDevice.device_id]
+  );
+  
+  res.json({
+    status: 'ok',
+    game_price: device[0]?.game_price || 10,
+    pending_commands: commands
+  });
+});
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
