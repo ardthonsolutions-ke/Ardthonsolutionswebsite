@@ -1190,6 +1190,370 @@ app.get('/cuepay/api/analytics/:deviceId', isCuePayAuth, async (req, res) => {
   }
 });
 
+// ============================================
+// CUE PAY COMPLETE ANALYTICS & MANAGEMENT
+// ============================================
+
+// Helper: Calculate customer retention
+async function getCustomerRetention(deviceId, days) {
+  const [result] = await db.query(
+    `SELECT 
+      COUNT(DISTINCT customer_number) as total_customers,
+      COUNT(DISTINCT CASE WHEN visits >= 2 THEN customer_number END) as returning_customers,
+      COUNT(DISTINCT CASE WHEN visits = 1 THEN customer_number END) as new_customers
+     FROM (
+       SELECT customer_number, COUNT(*) as visits
+       FROM cuepay_payments 
+       WHERE device_id = ? AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND customer_number != 'Unknown'
+       GROUP BY customer_number
+     ) t`,
+    [deviceId, days]
+  );
+  return result[0];
+}
+
+// ===== FINANCIAL REPORTS =====
+
+// Daily Summary Report
+app.get('/cuepay/reports/daily', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+
+    const [devices] = await db.query(
+      'SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?',
+      [userId]
+    );
+
+    const reports = [];
+    for (const device of devices) {
+      const [stats] = await db.query(
+        `SELECT 
+          COUNT(*) as payments,
+          SUM(amount) as revenue,
+          SUM(games_earned) as games,
+          COUNT(DISTINCT customer_number) as customers,
+          AVG(amount) as avg_payment,
+          MIN(payment_time) as first_game,
+          MAX(payment_time) as last_game
+         FROM cuepay_payments 
+         WHERE device_id = ? AND DATE(payment_time) = ?`,
+        [device.device_id, date]
+      );
+
+      const [hourly] = await db.query(
+        `SELECT HOUR(payment_time) as hour, SUM(amount) as revenue, COUNT(*) as payments
+         FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?
+         GROUP BY HOUR(payment_time) ORDER BY hour`,
+        [device.device_id, date]
+      );
+
+      reports.push({
+        ...device,
+        stats: stats[0],
+        hourly_breakdown: hourly
+      });
+    }
+
+    // Check goals
+    const [goals] = await db.query(
+      'SELECT * FROM cuepay_goals WHERE owner_id = ? AND is_active = 1 AND start_date <= ? AND (end_date >= ? OR end_date IS NULL)',
+      [userId, date, date]
+    );
+
+    res.render('cuepay/reports/daily', {
+      title: 'Daily Report - CuePay',
+      reports,
+      goals,
+      selectedDate: date,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    console.error('Daily report error:', err);
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// Weekly Report
+app.get('/cuepay/reports/weekly', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const [devices] = await db.query('SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?', [userId]);
+
+    const reports = [];
+    for (const device of devices) {
+      const [dailyStats] = await db.query(
+        `SELECT DATE(payment_time) as date,
+                DAYNAME(payment_time) as day_name,
+                SUM(amount) as revenue,
+                SUM(games_earned) as games,
+                COUNT(*) as payments,
+                COUNT(DISTINCT customer_number) as customers
+         FROM cuepay_payments 
+         WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+         GROUP BY DATE(payment_time)
+         ORDER BY date DESC`,
+        [device.device_id]
+      );
+
+      const [weekTotal] = await db.query(
+        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games, COUNT(*) as total_payments
+         FROM cuepay_payments WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
+        [device.device_id]
+      );
+
+      reports.push({ ...device, daily: dailyStats, total: weekTotal[0] });
+    }
+
+    res.render('cuepay/reports/weekly', {
+      title: 'Weekly Report - CuePay',
+      reports,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// Monthly Report
+app.get('/cuepay/reports/monthly', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const month = req.query.month || new Date().toISOString().substring(0, 7);
+
+    const [devices] = await db.query('SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?', [userId]);
+
+    const reports = [];
+    for (const device of devices) {
+      const [weeklyStats] = await db.query(
+        `SELECT WEEK(payment_time, 1) as week_num,
+                MIN(DATE(payment_time)) as week_start,
+                SUM(amount) as revenue,
+                SUM(games_earned) as games,
+                COUNT(*) as payments
+         FROM cuepay_payments 
+         WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?
+         GROUP BY WEEK(payment_time, 1)
+         ORDER BY week_num`,
+        [device.device_id, month]
+      );
+
+      const [monthTotal] = await db.query(
+        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games, 
+                COUNT(*) as total_payments, COUNT(DISTINCT customer_number) as total_customers,
+                AVG(amount) as avg_payment
+         FROM cuepay_payments WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
+        [device.device_id, month]
+      );
+
+      // Previous month for growth comparison
+      const prevMonth = month.substring(5) === '01' ? 
+        (parseInt(month.substring(0,4)) - 1) + '-12' : 
+        month.substring(0,5) + String(parseInt(month.substring(5)) - 1).padStart(2, '0');
+
+      const [prevTotal] = await db.query(
+        `SELECT SUM(amount) as prev_revenue FROM cuepay_payments 
+         WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
+        [device.device_id, prevMonth]
+      );
+
+      const growth = prevTotal[0].prev_revenue > 0 ? 
+        ((monthTotal[0].total_revenue - prevTotal[0].prev_revenue) / prevTotal[0].prev_revenue * 100) : 0;
+
+      reports.push({ ...device, weekly: weeklyStats, total: monthTotal[0], growth: growth.toFixed(1) });
+    }
+
+    res.render('cuepay/reports/monthly', {
+      title: 'Monthly Report - CuePay',
+      reports,
+      selectedMonth: month,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// Export CSV
+app.get('/cuepay/export/csv/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const [payments] = await db.query(
+      'SELECT transaction_id, amount, customer_number, games_earned, payment_time FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 1000',
+      [deviceId]
+    );
+
+    let csv = 'Transaction ID,Amount,Customer,Games,Date Time\n';
+    payments.forEach(p => {
+      csv += `${p.transaction_id},${p.amount},${p.customer_number},${p.games_earned},${p.payment_time}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=cuepay_${deviceId}_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ===== CUSTOMER ANALYTICS =====
+
+// Top Customers
+app.get('/cuepay/customers/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const [topCustomers] = await db.query(
+      `SELECT customer_number,
+              COUNT(*) as visits,
+              SUM(amount) as total_spent,
+              SUM(games_earned) as total_games,
+              AVG(amount) as avg_spend,
+              MAX(payment_time) as last_visit,
+              MIN(payment_time) as first_visit
+       FROM cuepay_payments 
+       WHERE device_id = ? AND customer_number != 'Unknown'
+       GROUP BY customer_number
+       ORDER BY total_spent DESC LIMIT 20`,
+      [deviceId]
+    );
+
+    const retention = await getCustomerRetention(deviceId, 30);
+
+    res.render('cuepay/customers', {
+      title: 'Customer Analytics - CuePay',
+      topCustomers,
+      retention,
+      deviceId,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ===== TABLE PERFORMANCE =====
+
+// Table Comparison
+app.get('/cuepay/compare', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const period = req.query.period || '7';
+
+    const [devices] = await db.query(
+      `SELECT d.*, 
+        (SELECT SUM(amount) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_revenue,
+        (SELECT SUM(games_earned) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_games,
+        (SELECT COUNT(*) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_payments
+       FROM cuepay_devices d WHERE d.owner_id = ?
+       ORDER BY period_revenue DESC`,
+      [parseInt(period), parseInt(period), userId]
+    );
+
+    res.render('cuepay/compare', {
+      title: 'Table Comparison - CuePay',
+      devices,
+      selectedPeriod: period,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ===== GOALS MANAGEMENT =====
+
+// Set Goal
+app.post('/cuepay/goals', isCuePayAuth, async (req, res) => {
+  try {
+    const { device_id, goal_type, target_revenue, target_games, start_date } = req.body;
+    await db.query(
+      'INSERT INTO cuepay_goals (owner_id, device_id, goal_type, target_revenue, target_games, start_date) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.session.cuepayUser.id, device_id || null, goal_type, target_revenue, target_games || null, start_date]
+    );
+    req.flash('success_msg', 'Goal set successfully!');
+    res.redirect('/cuepay/dashboard');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to set goal');
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ===== STAFF MANAGEMENT =====
+
+// Staff List
+app.get('/cuepay/staff', isCuePayAuth, async (req, res) => {
+  try {
+    const [staff] = await db.query('SELECT * FROM cuepay_staff WHERE owner_id = ? ORDER BY full_name', [req.session.cuepayUser.id]);
+    res.render('cuepay/staff', { title: 'Staff Management - CuePay', staff, user: req.session.cuepayUser });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// Add Staff
+app.post('/cuepay/staff', isCuePayAuth, async (req, res) => {
+  try {
+    const { full_name, email, phone, pin_code, role, commission_percent } = req.body;
+    await db.query(
+      'INSERT INTO cuepay_staff (owner_id, full_name, email, phone, pin_code, role, commission_percent) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.session.cuepayUser.id, full_name, email, phone, pin_code, role, commission_percent || 0]
+    );
+    req.flash('success_msg', 'Staff added!');
+    res.redirect('/cuepay/staff');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to add staff');
+    res.redirect('/cuepay/staff');
+  }
+});
+
+// ===== ALERTS =====
+
+// Alert Settings
+app.get('/cuepay/alerts', isCuePayAuth, async (req, res) => {
+  try {
+    const [alerts] = await db.query('SELECT * FROM cuepay_alerts WHERE owner_id = ?', [req.session.cuepayUser.id]);
+    const [history] = await db.query(
+      'SELECT * FROM cuepay_alert_history WHERE owner_id = ? ORDER BY created_at DESC LIMIT 20',
+      [req.session.cuepayUser.id]
+    );
+    res.render('cuepay/alerts', { title: 'Alert Settings - CuePay', alerts, history, user: req.session.cuepayUser });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// Toggle Alert
+app.post('/cuepay/alerts/toggle/:id', isCuePayAuth, async (req, res) => {
+  await db.query('UPDATE cuepay_alerts SET is_enabled = NOT is_enabled WHERE id = ? AND owner_id = ?', [req.params.id, req.session.cuepayUser.id]);
+  res.redirect('/cuepay/alerts');
+});
+
+// ===== MAINTENANCE LOG =====
+
+app.get('/cuepay/maintenance/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const [logs] = await db.query('SELECT * FROM cuepay_maintenance WHERE device_id = ? ORDER BY created_at DESC', [req.params.deviceId]);
+    res.render('cuepay/maintenance', { title: 'Maintenance Log - CuePay', logs, deviceId: req.params.deviceId, user: req.session.cuepayUser });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.post('/cuepay/maintenance/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const { maintenance_type, description, performed_by, cost, next_due_date } = req.body;
+    await db.query(
+      'INSERT INTO cuepay_maintenance (device_id, maintenance_type, description, performed_by, cost, next_due_date) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.params.deviceId, maintenance_type, description, performed_by, cost, next_due_date || null]
+    );
+    req.flash('success_msg', 'Maintenance logged!');
+    res.redirect(`/cuepay/maintenance/${req.params.deviceId}`);
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
 
 // 404
 app.use((req, res) => {
