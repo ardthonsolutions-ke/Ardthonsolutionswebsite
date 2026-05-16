@@ -915,6 +915,282 @@ app.get('/cuepay/api/device-status', validateDeviceApiKey, async (req, res) => {
   });
 });
 
+// ============================================
+// CUEPAY ANALYTICS & ENHANCED DASHBOARD
+// ============================================
+
+// Helper: Get device stats for date range
+async function getDeviceStats(deviceId, startDate, endDate) {
+  const [stats] = await db.query(
+    `SELECT 
+      COUNT(*) as total_payments,
+      COALESCE(SUM(games_earned), 0) as total_games,
+      COALESCE(SUM(amount), 0) as total_revenue,
+      COALESCE(AVG(amount), 0) as avg_payment,
+      COUNT(DISTINCT customer_number) as unique_customers,
+      MIN(payment_time) as first_payment,
+      MAX(payment_time) as last_payment
+     FROM cuepay_payments 
+     WHERE device_id = ? AND payment_time >= ? AND payment_time <= ?`,
+    [deviceId, startDate, endDate]
+  );
+  return stats[0];
+}
+
+// Helper: Get peak hour
+async function getPeakHour(deviceId, date) {
+  const [hours] = await db.query(
+    `SELECT HOUR(payment_time) as hour, COUNT(*) as count, SUM(amount) as revenue
+     FROM cuepay_payments 
+     WHERE device_id = ? AND DATE(payment_time) = ?
+     GROUP BY HOUR(payment_time)
+     ORDER BY count DESC LIMIT 1`,
+    [deviceId, date]
+  );
+  return hours[0] || null;
+}
+
+// Enhanced CuePay Dashboard with Analytics
+app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const today = new Date().toISOString().split('T')[0];
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+
+    // Enrich each device with stats
+    for (let device of devices) {
+      device.battery_percent = device.battery_voltage ? 
+        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
+      device.is_online = device.status === 'online';
+
+      // Today stats
+      const todayStats = await getDeviceStats(device.device_id, today + ' 00:00:00', today + ' 23:59:59');
+      device.today_games = todayStats.total_games;
+      device.today_revenue = todayStats.total_revenue;
+      device.today_payments = todayStats.total_payments;
+      device.today_customers = todayStats.unique_customers;
+
+      // Week stats
+      const weekStats = await getDeviceStats(device.device_id, weekAgo + ' 00:00:00', today + ' 23:59:59');
+      device.week_games = weekStats.total_games;
+      device.week_revenue = weekStats.total_revenue;
+      device.week_avg_payment = weekStats.avg_payment;
+
+      // Month stats
+      const monthStats = await getDeviceStats(device.device_id, monthAgo + ' 00:00:00', today + ' 23:59:59');
+      device.month_games = monthStats.total_games;
+      device.month_revenue = monthStats.total_revenue;
+
+      // Peak hour today
+      const peak = await getPeakHour(device.device_id, today);
+      device.peak_hour = peak ? peak.hour : null;
+      device.peak_hour_count = peak ? peak.count : 0;
+
+      // Daily breakdown for chart (last 7 days)
+      const [dailyBreakdown] = await db.query(
+        `SELECT DATE(payment_time) as date, 
+                SUM(amount) as revenue, 
+                SUM(games_earned) as games,
+                COUNT(*) as payments
+         FROM cuepay_payments 
+         WHERE device_id = ? AND payment_time >= ?
+         GROUP BY DATE(payment_time)
+         ORDER BY date DESC LIMIT 7`,
+        [device.device_id, weekAgo + ' 00:00:00']
+      );
+      device.daily_breakdown = dailyBreakdown.reverse();
+
+      // Last 10 payments
+      const [recentPayments] = await db.query(
+        'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 10',
+        [device.device_id]
+      );
+      device.recent_payments = recentPayments;
+    }
+
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard - Ardthon Solutions',
+      devices,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    console.error('Dashboard error:', err);
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard',
+      devices: [],
+      user: req.session.cuepayUser
+    });
+  }
+});
+
+// Device Detail with Full Analytics
+app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const { deviceId } = req.params;
+    const { period } = req.query; // day, week, month
+
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
+      [deviceId, userId]
+    );
+
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Device not found');
+      return res.redirect('/cuepay/dashboard');
+    }
+
+    const device = devices[0];
+    device.battery_percent = device.battery_voltage ? 
+      Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+
+    const today = new Date().toISOString().split('T')[0];
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const monthStart = new Date().toISOString().split('T')[0].substring(0, 7) + '-01';
+
+    // Today stats
+    const todayStats = await getDeviceStats(deviceId, today + ' 00:00:00', today + ' 23:59:59');
+
+    // Week stats
+    const weekStats = await getDeviceStats(deviceId, weekAgo + ' 00:00:00', today + ' 23:59:59');
+
+    // Month stats
+    const monthStats = await getDeviceStats(deviceId, monthStart + ' 00:00:00', today + ' 23:59:59');
+
+    // Hourly breakdown for today
+    const [hourlyBreakdown] = await db.query(
+      `SELECT HOUR(payment_time) as hour, 
+              SUM(amount) as revenue, 
+              SUM(games_earned) as games,
+              COUNT(*) as payments,
+              COUNT(DISTINCT customer_number) as customers
+       FROM cuepay_payments 
+       WHERE device_id = ? AND DATE(payment_time) = ?
+       GROUP BY HOUR(payment_time)
+       ORDER BY hour`,
+      [deviceId, today]
+    );
+
+    // Daily breakdown for last 30 days
+    const [dailyBreakdown] = await db.query(
+      `SELECT DATE(payment_time) as date,
+              SUM(amount) as revenue,
+              SUM(games_earned) as games,
+              COUNT(*) as payments,
+              COUNT(DISTINCT customer_number) as customers
+       FROM cuepay_payments 
+       WHERE device_id = ? AND payment_time >= ?
+       GROUP BY DATE(payment_time)
+       ORDER BY date DESC`,
+      [deviceId, new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
+    );
+
+    // Weekly summary
+    const [weeklySummary] = await db.query(
+      `SELECT YEARWEEK(payment_time, 1) as yw,
+              MIN(DATE(payment_time)) as week_start,
+              MAX(DATE(payment_time)) as week_end,
+              SUM(amount) as revenue,
+              SUM(games_earned) as games,
+              COUNT(*) as payments
+       FROM cuepay_payments 
+       WHERE device_id = ? AND payment_time >= ?
+       GROUP BY YEARWEEK(payment_time, 1)
+       ORDER BY yw DESC LIMIT 12`,
+      [deviceId, new Date(Date.now() - 84 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
+    );
+
+    // Top customers
+    const [topCustomers] = await db.query(
+      `SELECT customer_number,
+              COUNT(*) as visits,
+              SUM(amount) as total_spent,
+              SUM(games_earned) as total_games,
+              MAX(payment_time) as last_visit
+       FROM cuepay_payments 
+       WHERE device_id = ? AND customer_number != 'Unknown'
+       GROUP BY customer_number
+       ORDER BY total_spent DESC LIMIT 10`,
+      [deviceId]
+    );
+
+    // Recent payments
+    const [payments] = await db.query(
+      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
+      [deviceId]
+    );
+
+    // Pending commands
+    const [commands] = await db.query(
+      "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10",
+      [deviceId]
+    );
+
+    res.render('cuepay/device-detail', {
+      title: `${device.device_name} - CuePay Analytics`,
+      device,
+      todayStats,
+      weekStats,
+      monthStats,
+      hourlyBreakdown,
+      dailyBreakdown,
+      weeklySummary,
+      topCustomers,
+      payments,
+      commands,
+      selectedPeriod: period || 'today'
+    });
+  } catch(err) {
+    console.error('Device detail error:', err);
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// API: Get device analytics JSON
+app.get('/cuepay/api/analytics/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const { deviceId } = req.params;
+
+    // Verify ownership
+    const [devices] = await db.query(
+      'SELECT id FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
+      [deviceId, userId]
+    );
+    if (devices.length === 0) return res.status(403).json({ error: 'Access denied' });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Hourly breakdown
+    const [hourly] = await db.query(
+      `SELECT HOUR(payment_time) as hour, SUM(amount) as revenue, SUM(games_earned) as games, COUNT(*) as payments
+       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?
+       GROUP BY HOUR(payment_time) ORDER BY hour`,
+      [deviceId, today]
+    );
+
+    // Daily breakdown (7 days)
+    const [daily] = await db.query(
+      `SELECT DATE(payment_time) as date, SUM(amount) as revenue, SUM(games_earned) as games
+       FROM cuepay_payments WHERE device_id = ? AND payment_time >= ?
+       GROUP BY DATE(payment_time) ORDER BY date DESC LIMIT 7`,
+      [deviceId, new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
+    );
+
+    res.json({ hourly: hourly.reverse(), daily: daily.reverse() });
+  } catch(err) {
+    res.status(500).json({ error: 'Failed to get analytics' });
+  }
+});
+
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
