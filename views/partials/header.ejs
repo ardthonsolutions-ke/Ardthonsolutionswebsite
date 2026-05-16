@@ -1,40 +1,40 @@
-<nav class="navbar navbar-expand-lg">
+<nav class="navbar navbar-expand-lg fixed-top" style="background:rgba(15,15,26,0.95);backdrop-filter:blur(15px);border-bottom:1px solid #2a2a4a;">
     <div class="container">
-        <a class="navbar-brand" href="/">
-            <i class="fas fa-microchip me-2"></i>Ardthon<span>Solutions</span>
+        <a class="navbar-brand fw-bold" href="/" style="color:#ffffff;font-size:1.4rem;">
+            <i class="fas fa-microchip me-2" style="color:#00d4ff;"></i>Ardthon<span style="color:#00d4ff;">Solutions</span>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border-color:#444466;">
+            <span class="navbar-toggler-icon" style="filter:invert(1);"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mx-auto">
-                <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
-                <li class="nav-item"><a class="nav-link" href="/products">Products</a></li>
-                <li class="nav-item"><a class="nav-link" href="/projects">Projects</a></li>
-                <li class="nav-item"><a class="nav-link" href="/blog">Blog</a></li>
-                <li class="nav-item"><a class="nav-link" href="/cuepay/login">CuePay</a></li>
-                <li class="nav-item"><a class="nav-link" href="/discord">Discord</a></li>
-                <li class="nav-item"><a class="nav-link" href="/about">About</a></li>
-                <li class="nav-item"><a class="nav-link" href="/contact">Contact</a></li>
+                <li class="nav-item"><a class="nav-link" href="/" style="color:#ccccdd;">Home</a></li>
+                <li class="nav-item"><a class="nav-link" href="/products" style="color:#ccccdd;">Products</a></li>
+                <li class="nav-item"><a class="nav-link" href="/projects" style="color:#ccccdd;">Projects</a></li>
+                <li class="nav-item"><a class="nav-link" href="/blog" style="color:#ccccdd;">Blog</a></li>
+                <li class="nav-item"><a class="nav-link" href="/discord" style="color:#ccccdd;">Discord</a></li>
+                <li class="nav-item"><a class="nav-link" href="/about" style="color:#ccccdd;">About</a></li>
+                <li class="nav-item"><a class="nav-link" href="/contact" style="color:#ccccdd;">Contact</a></li>
+                <li class="nav-item"><a class="nav-link" href="/cuepay/login" style="color:#00d4ff;">CuePay</a></li>
             </ul>
             <div class="d-flex align-items-center gap-2">
-                <a href="/orders/cart" class="btn btn-outline-primary btn-sm position-relative">
+                <a href="/orders/cart" class="btn btn-sm position-relative" style="border:1px solid #444466;color:#ccccdd;border-radius:50px;">
                     <i class="fas fa-shopping-cart"></i>
-                    <span class="badge bg-warning" style="position:absolute;top:-8px;right:-8px;display:<%= cartCount > 0 ? 'inline' : 'none' %>"><%= cartCount %></span>
+                    <span class="badge" style="background:#00d4ff;color:#0a0a14;position:absolute;top:-8px;right:-8px;display:<%= cartCount > 0 ? 'inline' : 'none' %>;"><%= cartCount %></span>
                 </a>
                 <% if (user) { %>
                     <div class="dropdown">
-                        <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                        <button class="btn btn-sm dropdown-toggle" data-bs-toggle="dropdown" style="background:#00d4ff;color:#0a0a14;border-radius:50px;font-weight:600;">
                             <i class="fas fa-user me-1"></i><%= user.username %>
                         </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/dashboard">Dashboard</a></li>
-                            <li><a class="dropdown-item" href="/auth/logout">Logout</a></li>
+                        <ul class="dropdown-menu dropdown-menu-end" style="background:#1a1a2e;border:1px solid #2a2a4a;">
+                            <li><a class="dropdown-item" href="/dashboard" style="color:#ccccdd;">Dashboard</a></li>
+                            <li><a class="dropdown-item" href="/auth/logout" style="color:#ccccdd;">Logout</a></li>
                         </ul>
                     </div>
                 <% } else { %>
-                    <a href="/auth/login" class="btn btn-outline-primary btn-sm">Login</a>
-                    <a href="/auth/register" class="btn btn-primary btn-sm">Register</a>
+                    <a href="/auth/login" class="btn btn-sm" style="border:1px solid #444466;color:#ccccdd;border-radius:50px;">Login</a>
+                    <a href="/auth/register" class="btn btn-sm" style="background:#00d4ff;color:#0a0a14;border-radius:50px;font-weight:600;">Register</a>
                 <% } %>
             </div>
         </div>

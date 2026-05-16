@@ -1,10 +1,24 @@
 <%- include('layouts/main') %>
 <style>
+:root {
+  --bg-dark: #0f0f1a;
+  --bg-card: #1a1a2e;
+  --bg-card-hover: #222240;
+  --text-primary: #e0e0e0;
+  --text-muted: #8888aa;
+  --accent: #00d4ff;
+  --accent-dark: #0099cc;
+  --border: #2a2a4a;
+}
+
+body { background: var(--bg-dark); }
+
 /* Hero Slideshow */
 .hero-slideshow {
   position: relative;
-  height: 500px;
+  height: 550px;
   overflow: hidden;
+  background: #0a0a14;
 }
 .hero-slide {
   position: absolute;
@@ -12,53 +26,163 @@
   width: 100%; height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity 1s ease-in-out;
+  transition: opacity 1.2s ease-in-out;
+  filter: brightness(0.4) saturate(0.8);
 }
 .hero-slide.active { opacity: 1; }
 .hero-overlay {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
-  background: rgba(30, 41, 59, 0.7);
+  background: linear-gradient(135deg, rgba(15,15,26,0.85) 0%, rgba(26,26,46,0.7) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: white;
   z-index: 2;
 }
-.hero-content h1 { font-size: 3rem; font-weight: 800; margin-bottom: 10px; }
-.hero-content p { font-size: 1.3rem; opacity: 0.95; margin-bottom: 30px; }
-
-/* Product Image Gallery */
-.product-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
+.hero-content h1 {
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 0 40px rgba(0,212,255,0.3);
+  margin-bottom: 10px;
+  letter-spacing: -1px;
 }
-.gallery-item {
-  position: relative;
-  border-radius: 15px;
+.hero-content .slogan {
+  font-size: 1.4rem;
+  color: var(--accent);
+  margin-bottom: 15px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.hero-content .subtitle {
+  font-size: 1.1rem;
+  color: #9999bb;
+  margin-bottom: 35px;
+}
+
+/* Buttons - Dark Theme */
+.btn-primary-dark {
+  background: var(--accent);
+  color: #0a0a14;
+  padding: 14px 35px;
+  border-radius: 50px;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.3s;
+  border: none;
+  letter-spacing: 1px;
+}
+.btn-primary-dark:hover {
+  background: #00e5ff;
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(0,212,255,0.3);
+  color: #0a0a14;
+}
+.btn-outline-dark {
+  border: 2px solid #444466;
+  color: #ccccdd;
+  padding: 14px 35px;
+  border-radius: 50px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.3s;
+  letter-spacing: 1px;
+}
+.btn-outline-dark:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-3px);
+}
+
+/* Section Title */
+.section-title h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  margin-bottom: 15px;
+}
+.section-title p {
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Product Cards - Dark */
+.card-dark {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-  transition: transform 0.3s;
+  transition: all 0.3s;
   cursor: pointer;
 }
-.gallery-item:hover { transform: scale(1.03); }
-.gallery-item img {
-  width: 100%;
-  height: 250px;
-  object-fit: cover;
+.card-dark:hover {
+  background: var(--bg-card-hover);
+  border-color: #3a3a6a;
+  transform: translateY(-5px);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.4);
 }
-.gallery-caption {
+.card-dark img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  filter: brightness(0.8);
+}
+.card-dark .card-body { padding: 18px; }
+.card-dark .card-title { color: #ffffff; font-weight: 600; margin-bottom: 8px; }
+.card-dark .card-price { color: var(--accent); font-weight: 700; font-size: 1.2rem; }
+.card-dark .card-category { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; }
+
+/* Category Cards */
+.category-card-dark {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 35px 20px;
+  text-align: center;
+  transition: all 0.3s;
+  text-decoration: none;
+  display: block;
+}
+.category-card-dark:hover {
+  background: #1e1e40;
+  border-color: var(--accent);
+  transform: translateY(-5px);
+}
+.category-card-dark i { font-size: 2.5rem; color: var(--accent); margin-bottom: 15px; }
+.category-card-dark h5 { color: #ffffff; margin-bottom: 5px; }
+.category-card-dark p { color: var(--text-muted); margin: 0; font-size: 0.9rem; }
+
+/* Section */
+.section { padding: 70px 0; }
+.section-alt { background: #0d0d1f; }
+
+/* Slider Dots */
+.slider-dots {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 12px;
-  font-weight: 600;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  gap: 12px;
+}
+.slider-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 2px solid transparent;
+}
+.slider-dot.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(0,212,255,0.5);
 }
 
 /* Lightbox */
@@ -67,74 +191,79 @@
   position: fixed;
   top: 0; left: 0;
   width: 100%; height: 100%;
-  background: rgba(0,0,0,0.9);
+  background: rgba(0,0,0,0.95);
   z-index: 9999;
   align-items: center;
   justify-content: center;
 }
 .lightbox.show { display: flex; }
-.lightbox img { max-width: 90%; max-height: 90%; border-radius: 10px; }
+.lightbox img { max-width: 90%; max-height: 90%; border-radius: 12px; }
 .lightbox-close {
   position: absolute;
-  top: 20px; right: 30px;
-  color: white;
-  font-size: 40px;
+  top: 25px; right: 35px;
+  color: #ffffff;
+  font-size: 45px;
   cursor: pointer;
+  transition: color 0.3s;
 }
+.lightbox-close:hover { color: var(--accent); }
 
-/* Slider dots */
-.slider-dots {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  display: flex;
-  gap: 10px;
+/* Badge */
+.badge-dark {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
-.slider-dot {
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.5);
-  cursor: pointer;
-  transition: background 0.3s;
+.badge-completed { background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+.badge-progress { background: rgba(245,158,11,0.2); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+
+/* CuePay Section */
+.cuepay-section {
+  background: linear-gradient(135deg, #0a1628 0%, #0f1f3a 100%);
+  border-top: 1px solid #1a3355;
+  border-bottom: 1px solid #1a3355;
 }
-.slider-dot.active { background: white; }
+.cuepay-section i { color: var(--accent); }
+.cuepay-section h2 { color: #ffffff; }
+.cuepay-section p { color: #8899bb; }
+
+/* Discord Section */
+.discord-section {
+  background: linear-gradient(135deg, #1a1a3e 0%, #252550 100%);
+  border-top: 1px solid #333366;
+}
 
 @media (max-width: 768px) {
-  .hero-slideshow { height: 350px; }
-  .hero-content h1 { font-size: 2rem; }
+  .hero-slideshow { height: 400px; }
+  .hero-content h1 { font-size: 2.2rem; }
+  .hero-content .slogan { font-size: 1rem; }
 }
 </style>
 </head>
-<body>
+<body style="background:#0f0f1a;">
 <%- include('partials/header') %>
 
 <!-- Hero Slideshow -->
 <div class="hero-slideshow">
-  <!-- Slide 1 -->
-  <img src="/images/slides/slide1.jpg" class="hero-slide active" alt="Ardthon Solutions" onerror="this.src='/images/placeholder.jpg'">
-  <!-- Slide 2 -->
-  <img src="/images/slides/slide2.jpg" class="hero-slide" alt="Programmable Boards" onerror="this.src='/images/placeholder.jpg'">
-  <!-- Slide 3 -->
-  <img src="/images/slides/slide3.jpg" class="hero-slide" alt="IoT Solutions" onerror="this.src='/images/placeholder.jpg'">
-  <!-- Slide 4 -->
-  <img src="/images/slides/slide4.jpg" class="hero-slide" alt="CuePay Pool Automation" onerror="this.src='/images/placeholder.jpg'">
+  <img src="/images/slides/slide1.jpg" class="hero-slide active" alt="Ardthon Solutions">
+  <img src="/images/slides/slide2.jpg" class="hero-slide" alt="Programmable Boards">
+  <img src="/images/slides/slide3.jpg" class="hero-slide" alt="IoT Sensors">
+  <img src="/images/slides/slide4.jpg" class="hero-slide" alt="CuePay Automation">
 
-  <!-- Overlay Content -->
   <div class="hero-overlay">
     <div class="hero-content">
       <h1>Ardthon Solutions</h1>
-      <p>Connect with Ease</p>
-      <p>Programmable Boards • Sensors • Arduino • ESP32 • IoT Solutions</p>
+      <div class="slogan">Connect with Ease</div>
+      <p class="subtitle">Programmable Boards • Sensors • Arduino • ESP32 • IoT Solutions</p>
       <div>
-        <a href="/products" class="btn btn-light btn-lg me-2 rounded-pill px-4">Shop Now</a>
-        <a href="/projects" class="btn btn-outline-light btn-lg rounded-pill px-4">View Projects</a>
+        <a href="/products" class="btn-primary-dark me-3">Shop Now</a>
+        <a href="/projects" class="btn-outline-dark">View Projects</a>
       </div>
     </div>
   </div>
 
-  <!-- Slider Dots -->
   <div class="slider-dots">
     <span class="slider-dot active" onclick="goToSlide(0)"></span>
     <span class="slider-dot" onclick="goToSlide(1)"></span>
@@ -147,58 +276,61 @@
 <% if (typeof featuredProducts !== 'undefined' && featuredProducts && featuredProducts.length > 0) { %>
 <section class="section">
   <div class="container">
-    <div class="section-title"><h2>Featured Products</h2></div>
-    <div class="product-gallery">
+    <div class="section-title">
+      <h2>Featured Products</h2>
+      <p>High-quality boards and sensors for your projects</p>
+    </div>
+    <div class="row g-4">
       <% featuredProducts.forEach(function(product) { %>
-        <div class="gallery-item" onclick="window.location='/products/<%= product.slug %>'">
-          <% if (product.images && product.images[0] && product.images[0].url) { %>
-            <img src="<%= product.images[0].url %>" alt="<%= product.name %>" onerror="this.src='/images/placeholder.jpg'">
-          <% } else { %>
-            <img src="/images/placeholder.jpg" alt="<%= product.name %>">
-          <% } %>
-          <div class="gallery-caption">
-            <%= product.name %> - $<%= product.price %>
+        <div class="col-md-3">
+          <div class="card-dark" onclick="window.location='/products/<%= product.slug %>'">
+            <% if (product.images && product.images[0] && product.images[0].url) { %>
+              <img src="<%= product.images[0].url %>" alt="<%= product.name %>">
+            <% } else { %>
+              <div style="height:220px;background:#1a1a2e;display:flex;align-items:center;justify-content:center;">
+                <i class="fas fa-microchip fa-3x" style="color:#333366;"></i>
+              </div>
+            <% } %>
+            <div class="card-body">
+              <div class="card-category"><%= product.category %></div>
+              <div class="card-title"><%= product.name %></div>
+              <div class="card-price">$<%= product.price %></div>
+            </div>
           </div>
         </div>
       <% }) %>
     </div>
     <div class="text-center mt-4">
-      <a href="/products" class="btn btn-primary rounded-pill px-5">View All Products</a>
+      <a href="/products" class="btn-outline-dark">View All Products →</a>
     </div>
   </div>
 </section>
 <% } %>
 
 <!-- Categories -->
-<section class="section" style="background:#f1f5f9;">
+<section class="section section-alt">
   <div class="container">
     <div class="section-title"><h2>Shop by Category</h2></div>
-    <div class="row">
-      <div class="col-md-4 mb-3">
-        <a href="/products?category=Programmable Boards" class="text-decoration-none">
-          <div class="card text-center p-4" style="background:var(--primary);color:white;border:none;">
-            <i class="fas fa-microchip fa-3x mb-3"></i>
-            <h5>Programmable Boards</h5>
-            <p class="mb-0">Arduino, ESP32, Raspberry Pi</p>
-          </div>
+    <div class="row g-4">
+      <div class="col-md-4">
+        <a href="/products?category=Programmable Boards" class="category-card-dark">
+          <i class="fas fa-microchip"></i>
+          <h5>Programmable Boards</h5>
+          <p>Arduino, ESP32, Raspberry Pi</p>
         </a>
       </div>
-      <div class="col-md-4 mb-3">
-        <a href="/products?category=Sensors" class="text-decoration-none">
-          <div class="card text-center p-4" style="background:var(--success);color:white;border:none;">
-            <i class="fas fa-thermometer-half fa-3x mb-3"></i>
-            <h5>Sensors</h5>
-            <p class="mb-0">Temperature, Motion, Distance</p>
-          </div>
+      <div class="col-md-4">
+        <a href="/products?category=Sensors" class="category-card-dark">
+          <i class="fas fa-thermometer-half"></i>
+          <h5>Sensors & Modules</h5>
+          <p>Temperature, Motion, Distance</p>
         </a>
       </div>
-      <div class="col-md-4 mb-3">
-        <a href="/products?category=Kits" class="text-decoration-none">
-          <div class="card text-center p-4" style="background:var(--accent);color:var(--dark);border:none;">
-            <i class="fas fa-box-open fa-3x mb-3"></i>
-            <h5>Starter Kits</h5>
-            <p class="mb-0">Complete kits for beginners</p>
-          </div>
+      <div class="col-md-4">
+        <a href="/products?category=Kits" class="category-card-dark">
+          <i class="fas fa-box-open"></i>
+          <h5>Starter Kits</h5>
+          <p>Complete kits for all levels</p>
         </a>
       </div>
     </div>
@@ -210,18 +342,21 @@
 <section class="section">
   <div class="container">
     <div class="section-title"><h2>Latest Projects</h2></div>
-    <div class="row">
+    <div class="row g-4">
       <% latestProjects.forEach(function(project) { %>
-        <div class="col-md-4 mb-3">
-          <div class="card">
+        <div class="col-md-4">
+          <div class="card-dark" onclick="window.location='/projects/<%= project.slug %>'">
             <% if (project.images && project.images[0] && project.images[0].url) { %>
-              <img src="<%= project.images[0].url %>" class="card-img-top" alt="<%= project.title %>" style="height:200px;object-fit:cover;" onerror="this.src='/images/placeholder.jpg'">
+              <img src="<%= project.images[0].url %>" alt="<%= project.title %>">
+            <% } else { %>
+              <div style="height:200px;background:#1a1a2e;display:flex;align-items:center;justify-content:center;">
+                <i class="fas fa-project-diagram fa-3x" style="color:#333366;"></i>
+              </div>
             <% } %>
             <div class="card-body">
-              <span class="badge bg-<%= project.status === 'Completed' ? 'success' : 'warning' %> mb-2"><%= project.status %></span>
-              <h5><%= project.title %></h5>
-              <p class="text-muted"><%= project.field %></p>
-              <a href="/projects/<%= project.slug %>" class="btn btn-outline-primary btn-sm rounded-pill">Learn More</a>
+              <span class="badge-dark <%= project.status === 'Completed' ? 'badge-completed' : 'badge-progress' %> mb-2"><%= project.status %></span>
+              <div class="card-title"><%= project.title %></div>
+              <div class="card-category"><%= project.field %></div>
             </div>
           </div>
         </div>
@@ -231,23 +366,23 @@
 </section>
 <% } %>
 
-<!-- CuePay CTA -->
-<section class="section" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:white;text-align:center;">
+<!-- CuePay -->
+<section class="cuepay-section section text-center">
   <div class="container">
     <i class="fas fa-water fa-4x mb-3"></i>
     <h2>CuePay Pool Automation</h2>
-    <p style="font-size:1.1rem;margin-bottom:25px;">Monitor and control your pool tables remotely with real-time data</p>
-    <a href="/cuepay/login" class="btn btn-light btn-lg rounded-pill px-5">CuePay Login</a>
+    <p style="font-size:1.1rem;margin-bottom:25px;">Monitor your pool tables remotely with real-time data and payments</p>
+    <a href="/cuepay/login" class="btn-primary-dark">Access CuePay</a>
   </div>
 </section>
 
-<!-- Discord CTA -->
-<section class="section" style="background:#5865F2;color:white;text-align:center;">
+<!-- Discord -->
+<section class="discord-section section text-center">
   <div class="container">
-    <i class="fab fa-discord fa-4x mb-3"></i>
-    <h2>Join Our Discord Community</h2>
-    <p style="margin-bottom:25px;">Connect with makers, get support, and share projects</p>
-    <a href="/discord" class="btn btn-light btn-lg rounded-pill px-5">Join Now</a>
+    <i class="fab fa-discord fa-4x mb-3" style="color:#5865F2;"></i>
+    <h2 style="color:#ffffff;">Join Our Discord</h2>
+    <p style="color:#9999bb;margin-bottom:25px;">Connect with makers, get support, share projects</p>
+    <a href="/discord" class="btn-outline-dark" style="border-color:#5865F2;color:#5865F2;">Join Community</a>
   </div>
 </section>
 
@@ -262,37 +397,21 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// Slideshow
 let currentSlide = 0;
 const slides = document.querySelectorAll('.hero-slide');
 const dots = document.querySelectorAll('.slider-dot');
-const totalSlides = slides.length;
 
 function showSlide(index) {
   slides.forEach(s => s.classList.remove('active'));
   dots.forEach(d => d.classList.remove('active'));
-  currentSlide = (index + totalSlides) % totalSlides;
+  currentSlide = (index + slides.length) % slides.length;
   slides[currentSlide].classList.add('active');
   dots[currentSlide].classList.add('active');
 }
 
-function goToSlide(index) {
-  showSlide(index);
-}
+function goToSlide(index) { showSlide(index); }
+setInterval(() => showSlide(currentSlide + 1), 5000);
 
-// Auto-advance slides
-setInterval(() => showSlide(currentSlide + 1), 4000);
-
-// Lightbox for product images
-document.querySelectorAll('.gallery-item img').forEach(img => {
-  img.addEventListener('click', function(e) {
-    e.stopPropagation();
-    document.getElementById('lightboxImg').src = this.src;
-    document.getElementById('lightbox').classList.add('show');
-  });
-});
-
-// Keyboard navigation
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') document.getElementById('lightbox').classList.remove('show');
   if (e.key === 'ArrowRight') showSlide(currentSlide + 1);
