@@ -36,18 +36,21 @@
       <a href="/cuepay/logout" class="btn btn-outline-light btn-sm rounded-pill">Logout</a>
     </div>
   </div>
+
+  <!-- ===== PUT THE NAV LINKS HERE ===== -->
+  <div class="container py-2">
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/cuepay/dashboard" class="btn btn-sm btn-light rounded-pill active">📊 Dashboard</a>
+      <a href="/cuepay/reports/daily" class="btn btn-sm btn-outline-light rounded-pill">📅 Daily Report</a>
+      <a href="/cuepay/reports/weekly" class="btn btn-sm btn-outline-light rounded-pill">📈 Weekly</a>
+      <a href="/cuepay/reports/monthly" class="btn btn-sm btn-outline-light rounded-pill">📆 Monthly</a>
+      <a href="/cuepay/staff" class="btn btn-sm btn-outline-light rounded-pill">👥 Staff</a>
+      <a href="/cuepay/alerts" class="btn btn-sm btn-outline-light rounded-pill">🔔 Alerts</a>
+    </div>
+  </div>
+  <!-- ===== END NAV LINKS ===== -->
 </nav>
 
-<div class="container py-2">
-  <div class="d-flex flex-wrap gap-2">
-    <a href="/cuepay/dashboard" class="btn btn-sm btn-light rounded-pill active">📊 Dashboard</a>
-    <a href="/cuepay/reports/daily" class="btn btn-sm btn-outline-light rounded-pill">📅 Daily Report</a>
-    <a href="/cuepay/reports/weekly" class="btn btn-sm btn-outline-light rounded-pill">📈 Weekly</a>
-    <a href="/cuepay/reports/monthly" class="btn btn-sm btn-outline-light rounded-pill">📆 Monthly</a>
-    <a href="/cuepay/staff" class="btn btn-sm btn-outline-light rounded-pill">👥 Staff</a>
-    <a href="/cuepay/alerts" class="btn btn-sm btn-outline-light rounded-pill">🔔 Alerts</a>
-  </div>
-</div>
 
 <div class="container py-4">
   <% if (typeof success_msg !== 'undefined' && success_msg && success_msg.length > 0) { %>
