@@ -1554,6 +1554,46 @@ app.post('/cuepay/maintenance/:deviceId', isCuePayAuth, async (req, res) => {
   }
 });
 
+// ===== PROJECT REVIEWS =====
+
+// Create reviews table if not exists
+db.query(`CREATE TABLE IF NOT EXISTS project_reviews (
+  id int NOT NULL AUTO_INCREMENT,
+  name varchar(100) NOT NULL,
+  project varchar(100) NOT NULL,
+  rating tinyint NOT NULL,
+  comment text NOT NULL,
+  created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch(() => {});
+
+// Update projects route to include reviews
+app.get('/projects', async (req, res) => {
+  try {
+    const [reviews] = await db.query('SELECT * FROM project_reviews ORDER BY created_at DESC LIMIT 20');
+    res.render('projects', {
+      title: 'Projects - Ardthon Solutions',
+      reviews: reviews || []
+    });
+  } catch(err) {
+    res.render('projects', { title: 'Projects - Ardthon Solutions', reviews: [] });
+  }
+});
+
+// Submit review
+app.post('/projects/review', async (req, res) => {
+  try {
+    const { name, project, rating, comment } = req.body;
+    await db.query(
+      'INSERT INTO project_reviews (name, project, rating, comment) VALUES (?, ?, ?, ?)',
+      [name, project, parseInt(rating), comment]
+    );
+    req.flash('success_msg', 'Review submitted! Thank you for your feedback.');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to submit review');
+  }
+  res.redirect('/projects');
+});
 
 // 404
 app.use((req, res) => {
