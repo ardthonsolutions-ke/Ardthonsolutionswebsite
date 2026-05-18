@@ -12,16 +12,11 @@
 .stat-value.green { color: #10b981; }
 .stat-value.orange { color: #f59e0b; }
 .peak-badge { background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 15px; font-size: 0.75rem; font-weight: 600; }
-.mini-chart { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 5px; }
-.mini-bar { flex: 1; background: #0ea5e9; border-radius: 3px 3px 0 0; min-height: 2px; opacity: 0.7; }
-.mini-bar.today { opacity: 1; background: #0284c7; }
 .battery-bar { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; margin-top: 5px; }
 .battery-fill { height: 100%; border-radius: 3px; }
 .battery-good { background: #10b981; }
 .battery-medium { background: #f59e0b; }
 .battery-low { background: #ef4444; }
-.summary-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
-.summary-row:last-child { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -37,7 +32,6 @@
     </div>
   </div>
 
-  <!-- ===== PUT THE NAV LINKS HERE ===== -->
   <div class="container py-2">
     <div class="d-flex flex-wrap gap-2">
       <a href="/cuepay/dashboard" class="btn btn-sm btn-light rounded-pill active">📊 Dashboard</a>
@@ -48,9 +42,7 @@
       <a href="/cuepay/alerts" class="btn btn-sm btn-outline-light rounded-pill">🔔 Alerts</a>
     </div>
   </div>
-  <!-- ===== END NAV LINKS ===== -->
 </nav>
-
 
 <div class="container py-4">
   <% if (typeof success_msg !== 'undefined' && success_msg && success_msg.length > 0) { %>
@@ -83,7 +75,7 @@
               <small class="text-muted"><%= device.device_id %> • <%= device.location_area || 'No location' %></small>
             </div>
             <div class="text-end">
-              <span class="badge bg-<%= device.is_online ? 'success' : 'danger' %> mb-1"><%= device.status %></span><br>
+              <span id="status-<%= device.device_id %>" class="badge bg-<%= device.is_online ? 'success' : 'danger' %> mb-1"><%= device.status %></span><br>
               <small class="text-muted">Ksh <%= device.game_price %>/game</small>
             </div>
           </div>
@@ -91,11 +83,11 @@
           <!-- Key Stats Grid -->
           <div class="stat-grid">
             <div class="stat-item">
-              <div class="stat-value"><%= device.games_available || 0 %></div>
+              <div class="stat-value" id="games-<%= device.device_id %>"><%= device.games_available || 0 %></div>
               <div class="stat-label">Games Left</div>
             </div>
             <div class="stat-item">
-              <div class="stat-value green">Ksh <%= device.today_revenue || 0 %></div>
+              <div class="stat-value green" id="revenue-<%= device.device_id %>">Ksh <%= device.today_revenue || 0 %></div>
               <div class="stat-label">Today Revenue</div>
             </div>
             <div class="stat-item">
@@ -127,7 +119,7 @@
             </div>
           <% } %>
 
-          <!-- Mini Daily Chart (Last 7 Days) -->
+          <!-- Mini Daily Chart -->
           <% if (device.daily_breakdown && device.daily_breakdown.length > 0) { %>
             <div class="d-flex justify-content-between align-items-center">
               <small class="text-muted">Last 7 Days:</small>
@@ -153,15 +145,17 @@
             </div>
             <div class="battery-bar">
               <div class="battery-fill <%= device.battery_percent > 50 ? 'battery-good' : device.battery_percent > 20 ? 'battery-medium' : 'battery-low' %>" 
+                   id="battery-<%= device.device_id %>"
                    style="width:<%= device.battery_percent %>%"></div>
             </div>
           </div>
 
-          <!-- Last Activity -->
-          <div class="mt-2">
+          <!-- Status & Last Activity -->
+          <div class="mt-2 d-flex justify-content-between align-items-center">
+            <span id="status-<%= device.device_id %>" class="badge bg-<%= device.is_online ? 'success' : 'danger' %>"><%= device.status %></span>
             <small class="text-muted">
               <i class="far fa-clock me-1"></i>
-              Last sync: <%= device.last_sync ? new Date(device.last_sync).toLocaleString() : 'Never' %>
+              <span id="sync-<%= device.device_id %>"><%= device.last_sync ? new Date(device.last_sync).toLocaleString() : 'Never' %></span>
             </small>
           </div>
         </div>
@@ -171,5 +165,129 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+// Auto-refresh dashboard every 15 seconds
+let autoRefreshInterval;
+let refreshCount = 0;
+
+function startAutoRefresh() {
+  autoRefreshInterval = setInterval(() => {
+    refreshCount++;
+    fetch('/cuepay/api/dashboard-data')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.devices) {
+          updateDashboardCards(data.devices);
+          // Update refresh indicator
+          const indicator = document.getElementById('refreshIndicator');
+          if (indicator) {
+            indicator.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+            indicator.style.color = '#10b981';
+          }
+        }
+      })
+      .catch(err => {
+        console.log('Refresh error:', err);
+        const indicator = document.getElementById('refreshIndicator');
+        if (indicator) {
+          indicator.textContent = 'Refresh failed';
+          indicator.style.color = '#ef4444';
+        }
+      });
+  }, 15000);
+}
+
+function updateDashboardCards(devices) {
+  if (!devices || devices.length === 0) return;
+  
+  devices.forEach(device => {
+    // Update games count
+    const gamesEl = document.getElementById('games-' + device.device_id);
+    if (gamesEl) gamesEl.textContent = device.games_available || 0;
+    
+    // Update revenue
+    const revEl = document.getElementById('revenue-' + device.device_id);
+    if (revEl) revEl.textContent = 'Ksh ' + (device.today_revenue || 0);
+    
+    // Update battery bar
+    const battEl = document.getElementById('battery-' + device.device_id);
+    if (battEl) {
+      const percent = device.battery_voltage ? 
+        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+      const safePercent = Math.max(0, Math.min(100, percent));
+      battEl.style.width = safePercent + '%';
+      // Update battery color class
+      battEl.className = 'battery-fill ' + 
+        (safePercent > 50 ? 'battery-good' : safePercent > 20 ? 'battery-medium' : 'battery-low');
+    }
+    
+    // Update status badge
+    const statusEl = document.getElementById('status-' + device.device_id);
+    if (statusEl) {
+      const isOnline = device.status === 'online';
+      statusEl.textContent = isOnline ? 'online' : 'offline';
+      statusEl.className = 'badge mb-1 bg-' + (isOnline ? 'success' : 'danger');
+    }
+    
+    // Update last sync time
+    const syncEl = document.getElementById('sync-' + device.device_id);
+    if (syncEl && device.last_sync) {
+      syncEl.textContent = new Date(device.last_sync).toLocaleString();
+    }
+    
+    // Update card border color
+    const card = document.querySelector('.device-card[href*="' + device.device_id + '"]');
+    if (card) {
+      if (device.status === 'online') {
+        card.classList.add('online');
+        card.classList.remove('offline');
+      } else {
+        card.classList.add('offline');
+        card.classList.remove('online');
+      }
+    }
+  });
+}
+
+// Manual refresh button handler
+function manualRefresh() {
+  clearInterval(autoRefreshInterval);
+  startAutoRefresh();
+  // Trigger immediate refresh
+  fetch('/cuepay/api/dashboard-data')
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.devices) {
+        updateDashboardCards(data.devices);
+      }
+    });
+}
+
+// Start auto-refresh when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  startAutoRefresh();
+  
+  // Add refresh indicator
+  const container = document.querySelector('.container.py-4');
+  if (container) {
+    const indicator = document.createElement('div');
+    indicator.id = 'refreshIndicator';
+    indicator.style.cssText = 'text-align:right;font-size:0.75rem;color:#10b981;margin-bottom:10px;';
+    indicator.textContent = 'Auto-refresh active';
+    container.insertBefore(indicator, container.firstChild);
+  }
+});
+
+// Stop refresh when page hidden (save battery)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(autoRefreshInterval);
+  } else {
+    startAutoRefresh();
+  }
+});
+</script>
+
 </body>
 </html>

@@ -1595,6 +1595,59 @@ app.post('/projects/review', async (req, res) => {
   res.redirect('/projects');
 });
 
+// ===== TIME & STATUS ENDPOINTS =====
+
+// Get server time (for ESP32 to sync)
+app.get('/cuepay/api/time', async (req, res) => {
+  const now = new Date();
+  const timezone = req.query.tz || 'Africa/Nairobi';
+  res.json({
+    timestamp: now.toISOString(),
+    unix: Math.floor(now.getTime() / 1000),
+    time: now.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', hour12: false }),
+    date: now.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' }),
+    timezone: timezone
+  });
+});
+
+// Offline detection - update device status
+const OFFLINE_TIMEOUT = 60000; // 60 seconds without sync = offline
+
+// Auto-check offline devices every 30 seconds
+setInterval(async () => {
+  try {
+    await db.query(
+      "UPDATE cuepay_devices SET status = 'offline' WHERE status = 'online' AND last_sync < DATE_SUB(NOW(), INTERVAL 60 SECOND)"
+    );
+  } catch(e) {}
+}, 30000);
+
+// Device heartbeat endpoint
+app.post('/cuepay/api/heartbeat', validateDeviceApiKey, async (req, res) => {
+  try {
+    const device = req.cuepayDevice;
+    await db.query(
+      "UPDATE cuepay_devices SET status = 'online', last_sync = NOW() WHERE device_id = ?",
+      [device.device_id]
+    );
+    res.json({ status: 'ok', server_time: new Date().toISOString() });
+  } catch(err) {
+    res.status(500).json({ error: 'Heartbeat failed' });
+  }
+});
+// API: Get dashboard data for auto-refresh
+app.get('/cuepay/api/dashboard-data', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const [devices] = await db.query(
+      'SELECT device_id, device_name, games_available, battery_voltage, status, last_sync, today_revenue, today_games, game_price FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+    res.json({ success: true, devices, timestamp: new Date().toISOString() });
+  } catch(err) {
+    res.status(500).json({ success: false, error: 'Failed to load data' });
+  }
+});
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
