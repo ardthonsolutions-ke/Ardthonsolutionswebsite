@@ -1648,6 +1648,238 @@ app.get('/cuepay/api/dashboard-data', isCuePayAuth, async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to load data' });
   }
 });
+
+
+
+// ============================================
+// ADMIN DASHBOARD - View All CuePay Devices
+// ============================================
+
+// Admin middleware - check if user is admin
+function isAdmin(req, res, next) {
+  if (req.session.user && req.session.user.role === 'admin') return next();
+  req.flash('error_msg', 'Admin access required');
+  res.redirect('/auth/login');
+}
+
+// Admin Dashboard - View ALL devices from ALL users
+app.get('/admin', isAdmin, async (req, res) => {
+  try {
+    const [devices] = await db.query(`
+      SELECT d.*, u.username, u.email, u.fullName as owner_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      ORDER BY d.created_at DESC
+    `);
+
+    const [stats] = await db.query(`
+      SELECT 
+        COUNT(*) as total_devices,
+        SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online_devices,
+        SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline_devices,
+        SUM(today_revenue) as total_today_revenue,
+        SUM(total_revenue) as total_all_revenue
+      FROM cuepay_devices
+    `);
+
+    res.render('admin/dashboard', {
+      title: 'Admin Dashboard - Ardthon Solutions',
+      devices,
+      stats: stats[0],
+      user: req.session.user
+    });
+  } catch(err) {
+    console.error('Admin dashboard error:', err);
+    res.render('admin/dashboard', {
+      title: 'Admin Dashboard',
+      devices: [],
+      stats: {},
+      user: req.session.user
+    });
+  }
+});
+
+// Admin: View single device detail
+app.get('/admin/device/:deviceId', isAdmin, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+
+    const [devices] = await db.query(`
+      SELECT d.*, u.username, u.email, u.fullName as owner_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.device_id = ?
+    `, [deviceId]);
+
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Device not found');
+      return res.redirect('/admin');
+    }
+
+    const device = devices[0];
+    device.battery_percent = device.battery_voltage ? 
+      Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+
+    const [payments] = await db.query(
+      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 100',
+      [deviceId]
+    );
+
+    const [commands] = await db.query(
+      'SELECT * FROM cuepay_commands WHERE device_id = ? ORDER BY created_at DESC LIMIT 50',
+      [deviceId]
+    );
+
+    const [alerts] = await db.query(
+      'SELECT * FROM cuepay_alert_history WHERE device_id = ? ORDER BY created_at DESC LIMIT 20',
+      [deviceId]
+    );
+
+    res.render('admin/device-detail', {
+      title: `${device.device_name} - Admin`,
+      device,
+      payments,
+      commands,
+      alerts,
+      user: req.session.user
+    });
+  } catch(err) {
+    console.error('Admin device detail error:', err);
+    res.redirect('/admin');
+  }
+});
+
+// Admin: Send command to any device
+app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const { command_type, command_value } = req.body;
+
+    await db.query(
+      "INSERT INTO cuepay_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
+      [deviceId, command_type, command_value]
+    );
+
+    if (command_type === 'change_price') {
+      await db.query('UPDATE cuepay_devices SET game_price = ? WHERE device_id = ?',
+        [parseFloat(command_value), deviceId]);
+    }
+
+    req.flash('success_msg', `Command "${command_type}" sent to ${deviceId}`);
+    res.redirect(`/admin/device/${deviceId}`);
+  } catch(err) {
+    console.error('Admin command error:', err);
+    req.flash('error_msg', 'Failed to send command');
+    res.redirect('/admin');
+  }
+});
+
+// Admin: Delete device
+app.post('/admin/device/:deviceId/delete', isAdmin, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+
+    // Delete related data
+    await db.query('DELETE FROM cuepay_payments WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_commands WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_alerts WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_alert_history WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_devices WHERE device_id = ?', [deviceId]);
+
+    req.flash('success_msg', `Device ${deviceId} deleted successfully`);
+    res.redirect('/admin');
+  } catch(err) {
+    console.error('Delete device error:', err);
+    req.flash('error_msg', 'Failed to delete device');
+    res.redirect('/admin');
+  }
+});
+
+// Admin: Reset device revenue
+app.post('/admin/device/:deviceId/reset-revenue', isAdmin, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    await db.query(
+      'UPDATE cuepay_devices SET today_revenue = 0, today_games = 0, total_revenue = 0 WHERE device_id = ?',
+      [deviceId]
+    );
+    req.flash('success_msg', `Revenue reset for ${deviceId}`);
+    res.redirect(`/admin/device/${deviceId}`);
+  } catch(err) {
+    req.flash('error_msg', 'Failed to reset revenue');
+    res.redirect('/admin');
+  }
+});
+
+// Admin: View all users
+app.get('/admin/users', isAdmin, async (req, res) => {
+  try {
+    const [users] = await db.query(`
+      SELECT u.*, 
+        (SELECT COUNT(*) FROM cuepay_devices WHERE owner_id = u.id) as device_count,
+        (SELECT SUM(total_revenue) FROM cuepay_devices WHERE owner_id = u.id) as total_revenue
+      FROM cuepay_users u
+      ORDER BY u.created_at DESC
+    `);
+    res.render('admin/users', {
+      title: 'Users - Admin',
+      users,
+      user: req.session.user
+    });
+  } catch(err) {
+    res.redirect('/admin');
+  }
+});
+
+// Admin: Delete user
+app.post('/admin/users/:userId/delete', isAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Get user's devices
+    const [devices] = await db.query('SELECT device_id FROM cuepay_devices WHERE owner_id = ?', [userId]);
+    for (const d of devices) {
+      await db.query('DELETE FROM cuepay_payments WHERE device_id = ?', [d.device_id]);
+      await db.query('DELETE FROM cuepay_commands WHERE device_id = ?', [d.device_id]);
+    }
+    await db.query('DELETE FROM cuepay_devices WHERE owner_id = ?', [userId]);
+    await db.query('DELETE FROM cuepay_users WHERE id = ?', [userId]);
+    req.flash('success_msg', 'User deleted');
+    res.redirect('/admin/users');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to delete user');
+    res.redirect('/admin/users');
+  }
+});
+
+// Admin: View all payments
+app.get('/admin/payments', isAdmin, async (req, res) => {
+  try {
+    const [payments] = await db.query(`
+      SELECT p.*, d.device_name, u.email as owner_email
+      FROM cuepay_payments p
+      LEFT JOIN cuepay_devices d ON p.device_id = d.device_id
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      ORDER BY p.payment_time DESC
+      LIMIT 200
+    `);
+
+    const [totals] = await db.query(`
+      SELECT SUM(amount) as total, COUNT(*) as count
+      FROM cuepay_payments
+    `);
+
+    res.render('admin/payments', {
+      title: 'All Payments - Admin',
+      payments,
+      totals: totals[0],
+      user: req.session.user
+    });
+  } catch(err) {
+    res.redirect('/admin');
+  }
+});
+
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
