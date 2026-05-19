@@ -2115,6 +2115,47 @@ setInterval(async () => {
   }
 }, 60000); // Check every minute
 
+// ===== PWA PUSH NOTIFICATIONS =====
+
+// Store push subscriptions
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const subscription = req.body;
+    const userId = req.session.cuepayUser ? req.session.cuepayUser.id : null;
+    
+    // Store subscription (create table if needed)
+    await db.query(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id int NOT NULL AUTO_INCREMENT,
+      user_id int,
+      subscription json NOT NULL,
+      created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    
+    await db.query('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)',
+      [userId, JSON.stringify(subscription)]);
+    
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: 'Failed to subscribe' });
+  }
+});
+
+// Send push notification to all subscribers
+async function sendPushNotification(title, body, url = '/cuepay/dashboard') {
+  try {
+    const [subscriptions] = await db.query('SELECT subscription FROM push_subscriptions');
+    
+    for (const sub of subscriptions) {
+      const subscription = JSON.parse(sub.subscription);
+      // You would use web-push library here
+      // For now, this is the structure
+    }
+  } catch(err) {
+    console.error('Push notification error:', err);
+  }
+}
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
