@@ -32,7 +32,6 @@
     <small class="text-muted"><%= device.device_id %></small>
   </div>
 
-  <!-- Stats - NOW USING SERVER DATE -->
   <div class="row g-3 mb-4">
     <div class="col-md-2">
       <div class="stat-box">
@@ -72,7 +71,6 @@
     </div>
   </div>
 
-  <!-- Week & Month Summary -->
   <div class="row g-3 mb-4">
     <div class="col-md-3">
       <div class="stat-box">
@@ -130,7 +128,7 @@
         <div class="card-header bg-white rounded-top-4">
           <h5 class="mb-0">
             Recent Payments 
-            <small class="text-muted">(<%= typeof todayStats !== 'undefined' && todayStats ? todayStats.payments || 0 : 0 %> today)</small>
+            <small class="text-muted">(<%= payments ? payments.length : 0 %> total)</small>
           </h5>
         </div>
         <div class="card-body p-0">

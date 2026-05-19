@@ -2097,6 +2097,24 @@ setInterval(async () => {
   }
 }, 60000); // Check every 60 seconds
 
+
+// Reset device daily stats at midnight
+setInterval(async () => {
+  const now = new Date();
+  if (now.getHours() === 0 && now.getMinutes() <= 1) {
+    try {
+      await db.query(`
+        UPDATE cuepay_devices 
+        SET today_revenue = 0, today_games = 0 
+        WHERE last_sync < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+      `);
+      console.log('Midnight reset: cleared today stats');
+    } catch(err) {
+      console.error('Midnight reset error:', err.message);
+    }
+  }
+}, 60000); // Check every minute
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
