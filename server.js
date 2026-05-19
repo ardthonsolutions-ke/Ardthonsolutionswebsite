@@ -1649,8 +1649,6 @@ app.get('/cuepay/api/dashboard-data', isCuePayAuth, async (req, res) => {
   }
 });
 
-
-
 // ============================================
 // ADMIN DASHBOARD - View All CuePay Devices
 // ============================================
@@ -1666,7 +1664,7 @@ function isAdmin(req, res, next) {
 app.get('/admin', isAdmin, async (req, res) => {
   try {
     const [devices] = await db.query(`
-      SELECT d.*, u.username, u.email, u.fullName as owner_name
+      SELECT d.*, u.email, u.full_name as owner_name
       FROM cuepay_devices d
       LEFT JOIN cuepay_users u ON d.owner_id = u.id
       ORDER BY d.created_at DESC
@@ -1677,8 +1675,8 @@ app.get('/admin', isAdmin, async (req, res) => {
         COUNT(*) as total_devices,
         SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online_devices,
         SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline_devices,
-        SUM(today_revenue) as total_today_revenue,
-        SUM(total_revenue) as total_all_revenue
+        COALESCE(SUM(today_revenue), 0) as total_today_revenue,
+        COALESCE(SUM(total_revenue), 0) as total_all_revenue
       FROM cuepay_devices
     `);
 
@@ -1693,11 +1691,13 @@ app.get('/admin', isAdmin, async (req, res) => {
     res.render('admin/dashboard', {
       title: 'Admin Dashboard',
       devices: [],
-      stats: {},
+      stats: { total_devices: 0, online_devices: 0, offline_devices: 0, total_today_revenue: 0, total_all_revenue: 0 },
       user: req.session.user
     });
   }
 });
+
+
 
 // Admin: View single device detail
 app.get('/admin/device/:deviceId', isAdmin, async (req, res) => {
