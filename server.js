@@ -24,6 +24,56 @@ db.getConnection()
   .then(conn => { console.log('MySQL Connected'); conn.release(); })
   .catch(err => console.error('MySQL Error:', err.message));
 
+
+// ============================================
+// EMAIL CONFIGURATION - Using cPanel's FREE built-in email
+// ============================================
+const nodemailer = require('nodemailer');
+
+// Create email transporter using localhost (FREE - no external service needed)
+const emailTransporter = nodemailer.createTransport({
+  host: 'localhost',
+  port: 25,
+  secure: false,
+  tls: {
+    rejectUnauthorized: false
+  }
+});
+
+// Send email function
+async function sendEmail(to, subject, html) {
+  try {
+    const info = await emailTransporter.sendMail({
+      from: '"Ardthon Solutions Alerts" <alerts@ardthonsolutions.com>',
+      to: to,
+      subject: subject,
+      html: html
+    });
+    console.log('Email sent:', info.messageId);
+    return true;
+  } catch(err) {
+    console.error('Email error:', err.message);
+    return false;
+  }
+}
+
+// Check if current time is within business hours
+function isBusinessHours() {
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay(); // 0=Sunday, 6=Saturday
+  
+  // Business hours: Mon-Sat 8AM-10PM, Sun 10AM-8PM
+  if (day === 0) { // Sunday
+    return hour >= 10 && hour < 20;
+  } else if (day === 6) { // Saturday
+    return hour >= 8 && hour < 22;
+  } else { // Monday-Friday
+    return hour >= 8 && hour < 22;
+  }
+}
+
+
 // View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -1878,7 +1928,136 @@ app.get('/admin/payments', isAdmin, async (req, res) => {
     res.redirect('/admin');
   }
 });
+// ============================================
+// ALERT NOTIFICATION SYSTEM
+// ============================================
 
+// Offline detection with smart alerts
+setInterval(async () => {
+  try {
+    // Find devices offline for more than 15 minutes
+    const [offlineDevices] = await db.query(`
+      SELECT d.*, u.email, u.full_name 
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.status = 'offline' 
+        AND d.last_sync IS NOT NULL
+        AND d.last_sync < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    `);
+
+    for (const device of offlineDevices) {
+      // Check if we already sent an alert recently (avoid spam)
+      const [recentAlerts] = await db.query(
+        `SELECT id FROM cuepay_alert_history 
+         WHERE device_id = ? AND alert_type = 'device_offline' 
+         AND created_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)`,
+        [device.device_id]
+      );
+
+      if (recentAlerts.length === 0) {
+        // Only send email during business hours
+        if (isBusinessHours() && device.email) {
+          const offlineMinutes = Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000);
+          
+          const emailHtml = `
+            <div style="font-family:Arial;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:15px;">
+              <h2 style="color:#00d4ff;">⚠️ Device Offline Alert</h2>
+              <p>Your CuePay device <strong style="color:#fff;">${device.device_name}</strong> (${device.device_id}) has been offline for <strong style="color:#ef4444;">${offlineMinutes} minutes</strong>.</p>
+              <div style="background:#0a0a16;padding:20px;border-radius:10px;margin:20px 0;">
+                <p><strong>Device:</strong> ${device.device_name}</p>
+                <p><strong>Location:</strong> ${device.location_area || 'N/A'}</p>
+                <p><strong>Last Seen:</strong> ${new Date(device.last_sync).toLocaleString()}</p>
+                <p><strong>Games Available:</strong> ${device.games_available || 0}</p>
+              </div>
+              <p>Please check:</p>
+              <ul>
+                <li>Power supply is connected</li>
+                <li>WiFi is working</li>
+                <li>GSM module is functioning</li>
+              </ul>
+              <a href="https://ardthonsolutions.com/cuepay/dashboard" style="display:inline-block;background:#00d4ff;color:#000;padding:12px 30px;border-radius:50px;text-decoration:none;font-weight:700;margin-top:15px;">View Dashboard</a>
+              <p style="color:#888;font-size:0.8rem;margin-top:20px;">This is an automated alert from Ardthon Solutions CuePay System.</p>
+            </div>
+          `;
+
+          await sendEmail(device.email, `⚠️ ${device.device_name} is Offline - ${offlineMinutes} minutes`, emailHtml);
+        }
+
+        // Log the alert
+        await db.query(
+          `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message) 
+           VALUES (?, ?, 'device_offline', ?)`,
+          [device.owner_id, device.device_id, `Device offline for ${Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000)} minutes`]
+        );
+      }
+    }
+
+    // Low games alert
+    const [lowGamesDevices] = await db.query(`
+      SELECT d.*, u.email, u.full_name 
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.games_available <= 5 AND d.games_available > 0
+        AND d.status = 'online'
+    `);
+
+    for (const device of lowGamesDevices) {
+      const [recentAlerts] = await db.query(
+        `SELECT id FROM cuepay_alert_history 
+         WHERE device_id = ? AND alert_type = 'low_games' 
+         AND created_at > DATE_SUB(NOW(), INTERVAL 4 HOUR)`,
+        [device.device_id]
+      );
+
+      if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
+        const emailHtml = `
+          <div style="font-family:Arial;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:15px;">
+            <h2 style="color:#f59e0b;">🟡 Low Games Alert</h2>
+            <p><strong style="color:#fff;">${device.device_name}</strong> is running low on games: <strong style="color:#f59e0b;">${device.games_available} remaining</strong></p>
+            <p>Revenue today: Ksh ${device.today_revenue || 0}</p>
+            <a href="https://ardthonsolutions.com/cuepay/dashboard" style="display:inline-block;background:#00d4ff;color:#000;padding:12px 30px;border-radius:50px;text-decoration:none;font-weight:700;margin-top:15px;">Add Games</a>
+          </div>
+        `;
+
+        await sendEmail(device.email, `🟡 ${device.device_name} Low Games - ${device.games_available} left`, emailHtml);
+      }
+    }
+
+    // Low battery alert
+    const [lowBatteryDevices] = await db.query(`
+      SELECT d.*, u.email, u.full_name 
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.battery_voltage <= 10.5 AND d.battery_voltage > 0
+        AND d.status = 'online'
+    `);
+
+    for (const device of lowBatteryDevices) {
+      const [recentAlerts] = await db.query(
+        `SELECT id FROM cuepay_alert_history 
+         WHERE device_id = ? AND alert_type = 'low_battery' 
+         AND created_at > DATE_SUB(NOW(), INTERVAL 6 HOUR)`,
+        [device.device_id]
+      );
+
+      if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
+        await sendEmail(
+          device.email,
+          `🔋 ${device.device_name} Low Battery - ${device.battery_voltage}V`,
+          `<div style="font-family:Arial;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:15px;">
+            <h2 style="color:#ef4444;">🔋 Low Battery Warning</h2>
+            <p><strong style="color:#fff;">${device.device_name}</strong> battery is at <strong style="color:#ef4444;">${device.battery_voltage}V</strong></p>
+            <p>Please charge the device soon to avoid interruption.</p>
+          </div>`
+        );
+      }
+    }
+
+  } catch(err) {
+    console.error('Alert system error:', err.message);
+  }
+}, 60000); // Check every 60 seconds
 
 // 404
 app.use((req, res) => {
