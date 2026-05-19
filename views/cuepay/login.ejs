@@ -51,6 +51,9 @@
     </form>
     <div class="text-center mt-3">
       <p>Don't have an account? <a href="/cuepay/register" style="color:#0ea5e9;font-weight:600;">Register here</a></p>
+      <button id="manual-install-btn" onclick="installPWA()" style="background:#00d4ff;color:#000;border:none;padding:10px 25px;border-radius:50px;font-weight:700;margin-top:10px;cursor:pointer;display:none;">
+        📱 Install CuePay App
+      </button>
       <a href="/" class="text-muted" style="font-size:0.9rem;">← Back to Ardthon Solutions</a>
     </div>
   </div>
@@ -58,5 +61,26 @@
 
 <script src="/js/pwa.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.deferredPrompt = e;
+  document.getElementById('manual-install-btn').style.display = 'inline-block';
+});
+
+function installPWA() {
+  if (window.deferredPrompt) {
+    window.deferredPrompt.prompt();
+    window.deferredPrompt.userChoice.then((result) => {
+      window.deferredPrompt = null;
+      document.getElementById('manual-install-btn').style.display = 'none';
+    });
+  }
+}
+
+if (window.matchMedia('(display-mode: standalone)').matches) {
+  console.log('Already running as PWA');
+}
+</script>
 </body>
 </html>
