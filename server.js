@@ -44,7 +44,7 @@ const emailTransporter = nodemailer.createTransport({
 async function sendEmail(to, subject, html) {
   try {
     const info = await emailTransporter.sendMail({
-      from: '"Ardthon Solutions Alerts" <alerts@ardthonsolutions.com>',
+      from: '"CuePay Alerts" <cuepayalerts@ardthonsolutions.com>',
       to: to,
       subject: subject,
       html: html
