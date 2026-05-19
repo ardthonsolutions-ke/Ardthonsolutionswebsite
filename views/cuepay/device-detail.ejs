@@ -32,13 +32,72 @@
     <small class="text-muted"><%= device.device_id %></small>
   </div>
 
+  <!-- Stats - NOW USING SERVER DATE -->
   <div class="row g-3 mb-4">
-    <div class="col-md-2"><div class="stat-box"><div class="stat-value text-info"><%= device.games_available || 0 %></div><div class="stat-label">Games Left</div></div></div>
-    <div class="col-md-2"><div class="stat-box"><div class="stat-value text-success">Ksh <%= device.today_revenue || 0 %></div><div class="stat-label">Today Revenue</div></div></div>
-    <div class="col-md-2"><div class="stat-box"><div class="stat-value text-primary"><%= device.today_games || 0 %></div><div class="stat-label">Games Today</div></div></div>
-    <div class="col-md-2"><div class="stat-box"><div class="stat-value">Ksh <%= device.game_price %></div><div class="stat-label">Price/Game</div></div></div>
-    <div class="col-md-2"><div class="stat-box"><div class="stat-value text-warning"><%= device.battery_percent %>%</div><div class="stat-label">Battery</div></div></div>
-    <div class="col-md-2"><div class="stat-box"><div class="stat-value text-success">Ksh <%= device.total_revenue || 0 %></div><div class="stat-label">Total Revenue</div></div></div>
+    <div class="col-md-2">
+      <div class="stat-box">
+        <div class="stat-value text-info"><%= device.games_available || 0 %></div>
+        <div class="stat-label">Games Left</div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="stat-box">
+        <div class="stat-value text-success">Ksh <%= typeof todayStats !== 'undefined' && todayStats ? (todayStats.revenue || 0) : (device.today_revenue || 0) %></div>
+        <div class="stat-label">Today Revenue</div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="stat-box">
+        <div class="stat-value text-primary"><%= typeof todayStats !== 'undefined' && todayStats ? (todayStats.games || 0) : (device.today_games || 0) %></div>
+        <div class="stat-label">Today Games</div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="stat-box">
+        <div class="stat-value text-muted">Ksh <%= typeof yesterdayStats !== 'undefined' && yesterdayStats ? (yesterdayStats.revenue || 0) : 0 %></div>
+        <div class="stat-label">Yesterday Revenue</div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="stat-box">
+        <div class="stat-value">Ksh <%= device.game_price %></div>
+        <div class="stat-label">Price/Game</div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="stat-box">
+        <div class="stat-value text-warning"><%= device.battery_percent %>%</div>
+        <div class="stat-label">Battery</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Week & Month Summary -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="stat-box">
+        <div class="stat-value text-success">Ksh <%= typeof weekStats !== 'undefined' && weekStats ? (weekStats.revenue || 0) : 0 %></div>
+        <div class="stat-label">This Week</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-box">
+        <div class="stat-value text-primary"><%= typeof weekStats !== 'undefined' && weekStats ? (weekStats.games || 0) : 0 %></div>
+        <div class="stat-label">Games This Week</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-box">
+        <div class="stat-value text-info">Ksh <%= typeof monthStats !== 'undefined' && monthStats ? (monthStats.revenue || 0) : 0 %></div>
+        <div class="stat-label">This Month</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-box">
+        <div class="stat-value">Ksh <%= device.total_revenue || 0 %></div>
+        <div class="stat-label">Total Revenue</div>
+      </div>
+    </div>
   </div>
 
   <div class="row g-4">
@@ -68,20 +127,34 @@
     </div>
     <div class="col-lg-8">
       <div class="card rounded-4 shadow-sm">
-        <div class="card-header bg-white rounded-top-4"><h5 class="mb-0">Recent Payments</h5></div>
+        <div class="card-header bg-white rounded-top-4">
+          <h5 class="mb-0">
+            Recent Payments 
+            <small class="text-muted">(<%= typeof todayStats !== 'undefined' && todayStats ? todayStats.payments || 0 : 0 %> today)</small>
+          </h5>
+        </div>
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-hover mb-0" style="font-size:0.9rem;">
               <thead class="table-light"><tr><th>Transaction ID</th><th>Amount</th><th>Customer</th><th>Games</th><th>Time</th></tr></thead>
               <tbody>
                 <% if (typeof payments !== 'undefined' && payments.length > 0) { %>
-                  <% payments.forEach(function(p) { %>
+                  <% payments.forEach(function(p) { 
+                    var payDate = new Date(p.payment_time);
+                    var today = new Date();
+                    var isToday = payDate.toDateString() === today.toDateString();
+                    var isYesterday = new Date(today.getTime() - 86400000).toDateString() === payDate.toDateString();
+                  %>
                     <tr>
                       <td style="font-family:monospace;font-size:0.8rem;"><%= p.transaction_id %></td>
                       <td class="fw-bold">Ksh <%= p.amount %></td>
                       <td><%= p.customer_number %></td>
                       <td><%= p.games_earned %></td>
-                      <td style="font-size:0.8rem;"><%= new Date(p.payment_time).toLocaleString() %></td>
+                      <td style="font-size:0.8rem;">
+                        <%= payDate.toLocaleString() %>
+                        <% if (isToday) { %><span class="badge bg-success ms-1">Today</span><% } %>
+                        <% if (isYesterday) { %><span class="badge bg-warning ms-1">Yesterday</span><% } %>
+                      </td>
                     </tr>
                   <% }) %>
                 <% } else { %>

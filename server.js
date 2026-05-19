@@ -778,43 +778,80 @@ app.get('/cuepay/device-credentials', isCuePayAuth, (req, res) => {
   });
 });
 
-// Device detail page - FIXED
+// Device detail page
 app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
   try {
     const userId = req.session.cuepayUser.id;
     const { deviceId } = req.params;
-    
-    // ONLY get device if it belongs to THIS user
+
     const [devices] = await db.query(
       'SELECT * FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
       [deviceId, userId]
     );
-    
+
     if (devices.length === 0) {
-      req.flash('error_msg', 'Device not found or access denied');
+      req.flash('error_msg', 'Device not found');
       return res.redirect('/cuepay/dashboard');
     }
-    
+
     const device = devices[0];
     device.battery_percent = device.battery_voltage ? 
       Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
     device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
-    
-    // Get recent payments
+
+    // ===== USE SERVER TIME FOR TODAY/YESTERDAY =====
+    const today = new Date().toISOString().split('T')[0]; // "2026-05-20"
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]; // "2026-05-19"
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const monthStart = today.substring(0, 7) + '-01';
+
+    // Today stats (using server date)
+    const [todayStats] = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games, COUNT(*) as payments
+       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?`,
+      [deviceId, today]
+    );
+
+    // Yesterday stats
+    const [yesterdayStats] = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games
+       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?`,
+      [deviceId, yesterday]
+    );
+
+    // Week stats
+    const [weekStats] = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games
+       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) >= ?`,
+      [deviceId, weekAgo]
+    );
+
+    // Month stats
+    const [monthStats] = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games
+       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) >= ?`,
+      [deviceId, monthStart]
+    );
+
+    // Recent payments
     const [payments] = await db.query(
       'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
       [deviceId]
     );
-    
-    // Get pending commands
+
+    // Pending commands
     const [commands] = await db.query(
       "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10",
       [deviceId]
     );
-    
+
     res.render('cuepay/device-detail', {
       title: `${device.device_name} - CuePay`,
       device,
+      todayStats: todayStats[0],
+      yesterdayStats: yesterdayStats[0],
+      weekStats: weekStats[0],
+      monthStats: monthStats[0],
       payments,
       commands
     });
@@ -823,6 +860,7 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
     res.redirect('/cuepay/dashboard');
   }
 });
+
 
 // Send command to device - FIXED
 app.post('/cuepay/device/:deviceId/command', isCuePayAuth, async (req, res) => {
