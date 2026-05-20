@@ -1856,8 +1856,7 @@ app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
     if (command_type === 'change_price') {
       await db.query('UPDATE cuepay_devices SET game_price = ? WHERE device_id = ?',
         [parseFloat(command_value), deviceId]);
-    }
-        } else if (command_type === 'add_games') {
+    } else if (command_type === 'add_games') {
       await db.query(
         'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ?',
         [parseInt(command_value), deviceId]
