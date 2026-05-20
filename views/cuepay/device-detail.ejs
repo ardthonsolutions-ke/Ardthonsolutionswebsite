@@ -167,5 +167,32 @@
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Sound alert on device detail page
+function playBeep(frequency = 800, duration = 0.15, volume = 0.3) {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+    gainNode.gain.value = volume;
+    oscillator.start();
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch(e) {}
+}
+
+// Play sound when page loads (if there are payments today)
+<% if (typeof todayStats !== 'undefined' && todayStats && todayStats.revenue > 0) { %>
+  setTimeout(() => {
+    playBeep(600, 0.1, 0.2);
+    setTimeout(() => playBeep(800, 0.15, 0.3), 150);
+  }, 1000);
+<% } %>
+</script>
+
 </body>
 </html>

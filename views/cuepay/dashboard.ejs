@@ -248,6 +248,155 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 </script>
+<!-- Payment Sound Alert -->
+<audio id="paymentSound" preload="auto">
+  <source src="/sounds/payment.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+// ===== PAYMENT SOUND ALERT SYSTEM =====
+let lastPaymentCount = 0;
+let soundEnabled = true;
+
+// Generate beep sound using Web Audio API (no file needed)
+function playBeep(frequency = 800, duration = 0.15, volume = 0.3) {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+    gainNode.gain.value = volume;
+    
+    oscillator.start();
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch(e) {
+    console.log('Audio not supported');
+  }
+}
+
+// Play payment success sound (ascending tones)
+function playPaymentSound(amount) {
+  if (!soundEnabled) return;
+  
+  const baseFreq = amount > 100 ? 600 : amount > 50 ? 500 : 400;
+  
+  // Play three ascending beeps
+  setTimeout(() => playBeep(baseFreq, 0.12, 0.3), 0);
+  setTimeout(() => playBeep(baseFreq * 1.25, 0.12, 0.3), 150);
+  setTimeout(() => playBeep(baseFreq * 1.5, 0.2, 0.4), 300);
+  
+  // Show payment notification
+  showPaymentToast(amount);
+}
+
+// Play alert sound (for offline/low battery)
+function playAlertSound() {
+  if (!soundEnabled) return;
+  playBeep(300, 0.3, 0.3);
+  setTimeout(() => playBeep(250, 0.4, 0.3), 350);
+}
+
+// Show payment notification toast
+function showPaymentToast(amount) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 15px 25px;
+    border-radius: 15px;
+    font-weight: 700;
+    font-size: 1.2rem;
+    z-index: 9999;
+    box-shadow: 0 10px 40px rgba(16,185,129,0.5);
+    animation: slideIn 0.5s ease, slideOut 0.5s ease 3.5s forwards;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  `;
+  toast.innerHTML = `
+    <span style="font-size:2rem;">💰</span>
+    <div>
+      <div style="font-size:0.8rem;opacity:0.8;">New Payment!</div>
+      <div>Ksh ${amount.toFixed(0)}</div>
+    </div>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:white;cursor:pointer;font-size:1.2rem;margin-left:10px;">✕</button>
+  `;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// Toggle sound button
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  const btn = document.getElementById('soundToggleBtn');
+  if (btn) {
+    btn.innerHTML = soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF';
+    btn.style.background = soundEnabled ? '#10b981' : '#ef4444';
+  }
+  if (soundEnabled) playBeep(500, 0.1, 0.2);
+}
+
+// Monitor for new payments in auto-refresh
+const originalUpdateCards = updateDashboardCards;
+updateDashboardCards = function(devices) {
+  if (!devices || devices.length === 0) return;
+  
+  devices.forEach(device => {
+    const currentRevenue = parseFloat(device.today_revenue || 0);
+    const previousRevenue = parseFloat(device._previousRevenue || 0);
+    
+    // Check if revenue increased (new payment)
+    if (currentRevenue > previousRevenue && previousRevenue > 0) {
+      const paymentAmount = currentRevenue - previousRevenue;
+      playPaymentSound(paymentAmount);
+    }
+    
+    // Store current revenue for next comparison
+    device._previousRevenue = currentRevenue;
+  });
+  
+  // Call original function
+  originalUpdateCards(devices);
+};
+
+// Add sound toggle button to dashboard
+document.addEventListener('DOMContentLoaded', () => {
+  const nav = document.querySelector('.cuepay-nav .container.py-2 .d-flex');
+  if (nav) {
+    const soundBtn = document.createElement('button');
+    soundBtn.id = 'soundToggleBtn';
+    soundBtn.className = 'btn btn-sm rounded-pill';
+    soundBtn.style.cssText = 'background:#10b981;color:white;border:none;cursor:pointer;margin-left:auto;';
+    soundBtn.innerHTML = '🔊 Sound ON';
+    soundBtn.onclick = toggleSound;
+    nav.appendChild(soundBtn);
+  }
+});
+
+// CSS animations for toast
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+  }
+`;
+document.head.appendChild(style);
+</script>
 
 </body>
 </html>
