@@ -886,14 +886,19 @@ app.post('/cuepay/device/:deviceId/command', isCuePayAuth, async (req, res) => {
       [deviceId, command_type, command_value]
     );
     
-    // If command is change_price, update the device price immediately
-    if (command_type === 'change_price') {
-      await db.query(
-        'UPDATE cuepay_devices SET game_price = ? WHERE device_id = ? AND owner_id = ?',
-        [parseFloat(command_value), deviceId, userId]
-      );
-    }
-    
+ // Update device immediately based on command type
+if (command_type === 'change_price') {
+  await db.query(
+    'UPDATE cuepay_devices SET game_price = ? WHERE device_id = ? AND owner_id = ?',
+    [parseFloat(command_value), deviceId, userId]
+  );
+} else if (command_type === 'add_games') {
+  await db.query(
+    'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ? AND owner_id = ?',
+    [parseInt(command_value), deviceId, userId]
+  );
+}
+
     req.flash('success_msg', `Command sent! Device will update on next sync.`);
     res.redirect(`/cuepay/device/${deviceId}`);
   } catch(err) {
@@ -1851,6 +1856,12 @@ app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
     if (command_type === 'change_price') {
       await db.query('UPDATE cuepay_devices SET game_price = ? WHERE device_id = ?',
         [parseFloat(command_value), deviceId]);
+    }
+        } else if (command_type === 'add_games') {
+      await db.query(
+        'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ?',
+        [parseInt(command_value), deviceId]
+      );
     }
 
     req.flash('success_msg', `Command "${command_type}" sent to ${deviceId}`);
