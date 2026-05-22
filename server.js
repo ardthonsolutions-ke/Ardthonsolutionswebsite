@@ -32,11 +32,12 @@ const nodemailer = require('nodemailer');
 
 // Create email transporter using localhost (FREE - no external service needed)
 const emailTransporter = nodemailer.createTransport({
-  host: 'localhost',
-  port: 25,
+  host: 'mail.ardthonsolutions.com',
+  port: 587,
   secure: false,
-  tls: {
-    rejectUnauthorized: false
+  auth: {
+    user: 'cuepayalerts@ardthonsolutions.com',
+    pass: 'Ardthon254@321'
   }
 });
 
