@@ -1980,6 +1980,9 @@ app.get('/admin/payments', isAdmin, async (req, res) => {
     res.redirect('/admin');
   }
 });
+
+
+
 // ============================================
 // ALERT NOTIFICATION SYSTEM
 // ============================================
@@ -1999,7 +2002,6 @@ setInterval(async () => {
     `);
 
     for (const device of offlineDevices) {
-      // Check if we already sent an alert recently (avoid spam)
       const [recentAlerts] = await db.query(
         `SELECT id FROM cuepay_alert_history 
          WHERE device_id = ? AND alert_type = 'device_offline' 
@@ -2008,35 +2010,12 @@ setInterval(async () => {
       );
 
       if (recentAlerts.length === 0) {
-        // Only send email during business hours
         if (isBusinessHours() && device.email) {
           const offlineMinutes = Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000);
-          
-          const emailHtml = `
-            <div style="font-family:Arial;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:15px;">
-              <h2 style="color:#00d4ff;">⚠️ Device Offline Alert</h2>
-              <p>Your CuePay device <strong style="color:#fff;">${device.device_name}</strong> (${device.device_id}) has been offline for <strong style="color:#ef4444;">${offlineMinutes} minutes</strong>.</p>
-              <div style="background:#0a0a16;padding:20px;border-radius:10px;margin:20px 0;">
-                <p><strong>Device:</strong> ${device.device_name}</p>
-                <p><strong>Location:</strong> ${device.location_area || 'N/A'}</p>
-                <p><strong>Last Seen:</strong> ${new Date(device.last_sync).toLocaleString()}</p>
-                <p><strong>Games Available:</strong> ${device.games_available || 0}</p>
-              </div>
-              <p>Please check:</p>
-              <ul>
-                <li>Power supply is connected</li>
-                <li>WiFi is working</li>
-                <li>GSM module is functioning</li>
-              </ul>
-              <a href="https://ardthonsolutions.com/cuepay/dashboard" style="display:inline-block;background:#00d4ff;color:#000;padding:12px 30px;border-radius:50px;text-decoration:none;font-weight:700;margin-top:15px;">View Dashboard</a>
-              <p style="color:#888;font-size:0.8rem;margin-top:20px;">This is an automated alert from Ardthon Solutions CuePay System.</p>
-            </div>
-          `;
-
-          await sendEmail(device.email, `⚠️ ${device.device_name} is Offline - ${offlineMinutes} minutes`, emailHtml);
+          const emailText = `⚠️ ${device.device_name} is Offline\n\nDevice: ${device.device_name} (${device.device_id})\nLocation: ${device.location_area || 'N/A'}\nOffline for: ${offlineMinutes} minutes\nLast Seen: ${new Date(device.last_sync).toLocaleString()}\nGames Available: ${device.games_available || 0}\n\nPlease check:\n- Power supply is connected\n- WiFi is working\n- GSM module is functioning\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard`;
+          await sendEmail(device.email, `⚠️ ${device.device_name} is Offline - ${offlineMinutes} min`, emailText);
         }
 
-        // Log the alert
         await db.query(
           `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message) 
            VALUES (?, ?, 'device_offline', ?)`,
@@ -2063,16 +2042,8 @@ setInterval(async () => {
       );
 
       if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
-        const emailHtml = `
-          <div style="font-family:Arial;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:15px;">
-            <h2 style="color:#f59e0b;">🟡 Low Games Alert</h2>
-            <p><strong style="color:#fff;">${device.device_name}</strong> is running low on games: <strong style="color:#f59e0b;">${device.games_available} remaining</strong></p>
-            <p>Revenue today: Ksh ${device.today_revenue || 0}</p>
-            <a href="https://ardthonsolutions.com/cuepay/dashboard" style="display:inline-block;background:#00d4ff;color:#000;padding:12px 30px;border-radius:50px;text-decoration:none;font-weight:700;margin-top:15px;">Add Games</a>
-          </div>
-        `;
-
-        await sendEmail(device.email, `🟡 ${device.device_name} Low Games - ${device.games_available} left`, emailHtml);
+        const emailText = `🟡 ${device.device_name} Low Games Alert\n\nDevice: ${device.device_name} (${device.device_id})\nGames Remaining: ${device.games_available}\nRevenue Today: Ksh ${device.today_revenue || 0}\n\nAdd games from your dashboard to avoid running out!\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard`;
+        await sendEmail(device.email, `🟡 ${device.device_name} Low Games - ${device.games_available} left`, emailText);
       }
     }
 
@@ -2094,15 +2065,8 @@ setInterval(async () => {
       );
 
       if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
-        await sendEmail(
-          device.email,
-          `🔋 ${device.device_name} Low Battery - ${device.battery_voltage}V`,
-          `<div style="font-family:Arial;max-width:600px;margin:0 auto;background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:15px;">
-            <h2 style="color:#ef4444;">🔋 Low Battery Warning</h2>
-            <p><strong style="color:#fff;">${device.device_name}</strong> battery is at <strong style="color:#ef4444;">${device.battery_voltage}V</strong></p>
-            <p>Please charge the device soon to avoid interruption.</p>
-          </div>`
-        );
+        const batteryText = `🔋 ${device.device_name} Low Battery Warning\n\nDevice: ${device.device_name} (${device.device_id})\nBattery Voltage: ${device.battery_voltage}V\n\nPlease charge the device soon to avoid interruption.\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard`;
+        await sendEmail(device.email, `🔋 ${device.device_name} Low Battery - ${device.battery_voltage}V`, batteryText);
       }
     }
 
@@ -2110,6 +2074,7 @@ setInterval(async () => {
     console.error('Alert system error:', err.message);
   }
 }, 60000); // Check every 60 seconds
+
 
 
 // Reset device daily stats at midnight
