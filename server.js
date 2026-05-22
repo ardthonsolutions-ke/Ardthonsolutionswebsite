@@ -50,6 +50,7 @@ async function sendEmail(to, subject, html) {
       from: '"CuePay Alerts" <cuepayalerts@ardthonsolutions.com>',
       to: to,
       subject: subject,
+      text: subject + ' - View your CuePay dashboard for details.',
       html: html
     });
     console.log('Email sent:', info.messageId);
