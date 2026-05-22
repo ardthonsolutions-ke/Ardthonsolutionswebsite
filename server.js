@@ -30,21 +30,17 @@ db.getConnection()
 // ============================================
 const nodemailer = require('nodemailer');
 
-// Create email transporter using SMTP authentication
+
+
+// Create email transporter using localhost
 const emailTransporter = nodemailer.createTransport({
-  host: 'mail.ardthonsolutions.com',
-  port: 587,
+  host: 'localhost',
+  port: 25,
   secure: false,
-  auth: {
-    user: 'cuepayalerts@ardthonsolutions.com',
-    pass: 'Ardthon254@321'
-  },
   tls: {
     rejectUnauthorized: false
   }
 });
-
-
 
 
 // Send email function
