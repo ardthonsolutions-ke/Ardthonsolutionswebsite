@@ -1982,7 +1982,6 @@ app.get('/admin/payments', isAdmin, async (req, res) => {
 });
 
 
-
 // ============================================
 // ALERT NOTIFICATION SYSTEM
 // ============================================
@@ -2012,14 +2011,14 @@ setInterval(async () => {
       if (recentAlerts.length === 0) {
         if (isBusinessHours() && device.email) {
           const offlineMinutes = Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000);
-          const emailText = `⚠️ ${device.device_name} is Offline\n\nDevice: ${device.device_name} (${device.device_id})\nLocation: ${device.location_area || 'N/A'}\nOffline for: ${offlineMinutes} minutes\nLast Seen: ${new Date(device.last_sync).toLocaleString()}\nGames Available: ${device.games_available || 0}\n\nPlease check:\n- Power supply is connected\n- WiFi is working\n- GSM module is functioning\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard`;
-          await sendEmail(device.email, `⚠️ ${device.device_name} is Offline - ${offlineMinutes} min`, emailText);
+          const emailText = 'Device ' + device.device_name + ' is Offline\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nLocation: ' + (device.location_area || 'N/A') + '\nOffline for: ' + offlineMinutes + ' minutes\nLast Seen: ' + new Date(device.last_sync).toLocaleString() + '\nGames Available: ' + (device.games_available || 0) + '\n\nPlease check:\n- Power supply is connected\n- WiFi is working\n- GSM module is functioning\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
+          await sendEmail(device.email, 'Device ' + device.device_name + ' status update', emailText);
         }
 
         await db.query(
           `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message) 
            VALUES (?, ?, 'device_offline', ?)`,
-          [device.owner_id, device.device_id, `Device offline for ${Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000)} minutes`]
+          [device.owner_id, device.device_id, 'Device offline for ' + Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000) + ' minutes']
         );
       }
     }
@@ -2042,8 +2041,8 @@ setInterval(async () => {
       );
 
       if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
-        const emailText = `🟡 ${device.device_name} Low Games Alert\n\nDevice: ${device.device_name} (${device.device_id})\nGames Remaining: ${device.games_available}\nRevenue Today: Ksh ${device.today_revenue || 0}\n\nAdd games from your dashboard to avoid running out!\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard`;
-        await sendEmail(device.email, `🟡 ${device.device_name} Low Games - ${device.games_available} left`, emailText);
+        const emailText = 'Device ' + device.device_name + ' Low Games Alert\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nGames Remaining: ' + device.games_available + '\nRevenue Today: Ksh ' + (device.today_revenue || 0) + '\n\nAdd games from your dashboard to avoid running out!\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
+        await sendEmail(device.email, 'Device ' + device.device_name + ' low games alert', emailText);
       }
     }
 
@@ -2065,8 +2064,8 @@ setInterval(async () => {
       );
 
       if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
-        const batteryText = `🔋 ${device.device_name} Low Battery Warning\n\nDevice: ${device.device_name} (${device.device_id})\nBattery Voltage: ${device.battery_voltage}V\n\nPlease charge the device soon to avoid interruption.\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard`;
-        await sendEmail(device.email, `🔋 ${device.device_name} Low Battery - ${device.battery_voltage}V`, batteryText);
+        const batteryText = 'Device ' + device.device_name + ' Low Battery Warning\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nBattery Voltage: ' + device.battery_voltage + 'V\n\nPlease charge the device soon to avoid interruption.\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
+        await sendEmail(device.email, 'Device ' + device.device_name + ' battery warning', batteryText);
       }
     }
 
@@ -2074,7 +2073,6 @@ setInterval(async () => {
     console.error('Alert system error:', err.message);
   }
 }, 60000); // Check every 60 seconds
-
 
 
 // Reset device daily stats at midnight
