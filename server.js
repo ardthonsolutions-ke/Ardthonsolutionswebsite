@@ -902,6 +902,12 @@ if (command_type === 'change_price') {
     [parseInt(command_value), deviceId, userId]
   );
 }
+ else if (command_type === 'remove_games') {
+  await db.query(
+    'UPDATE cuepay_devices SET games_available = GREATEST(games_available - ?, 0) WHERE device_id = ? AND owner_id = ?',
+    [parseInt(command_value), deviceId, userId]
+  );
+}
 
     req.flash('success_msg', `Command sent! Device will update on next sync.`);
     res.redirect(`/cuepay/device/${deviceId}`);
