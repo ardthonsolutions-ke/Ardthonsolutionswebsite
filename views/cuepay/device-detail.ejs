@@ -106,12 +106,13 @@
           <form action="/cuepay/device/<%= device.device_id %>/command" method="POST">
             <div class="mb-3">
               <label class="form-label">Command Type</label>
-              <select name="command_type" class="form-select" required>
-                <option value="change_price">Change Game Price</option>
-                <option value="add_games">Add Games</option>
-                <option value="restart">Restart Device</option>
-                <option value="reset_today">Reset Today Stats</option>
-                <option value="sync_now">Force Sync Now</option>
+               <select name="command_type" class="form-select" required>
+                 <option value="change_price">Change Game Price</option>
+                 <option value="add_games">Add Games</option>
+                 <option value="remove_games">Remove Games</option>
+                 <option value="restart">Restart Device</option>
+                 <option value="reset_today">Reset Today Stats</option>
+                 <option value="sync_now">Force Sync Now</option>
               </select>
             </div>
             <div class="mb-3">

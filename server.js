@@ -1865,7 +1865,14 @@ app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
         'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ?',
         [parseInt(command_value), deviceId]
       );
+    }  else if (command_type === 'remove_games') {
+       await db.query(
+    'UPDATE cuepay_devices SET games_available = GREATEST(games_available - ?, 0) WHERE device_id = ? AND owner_id = ?',
+      [parseInt(command_value), deviceId, userId]
+      );
     }
+
+    
 
     req.flash('success_msg', `Command "${command_type}" sent to ${deviceId}`);
     res.redirect(`/admin/device/${deviceId}`);
