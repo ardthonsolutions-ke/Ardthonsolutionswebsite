@@ -1,0 +1,171 @@
+<% layout('layouts/main', { title: title }) %>
+
+<section class="allersafe-hero" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 80px 0;">
+    <div class="container text-center text-white">
+        <i class="fas fa-gem fa-4x mb-3"></i>
+        <h1 class="display-4 fw-bold">ALLERSAFE</h1>
+        <p class="lead fs-3">Hypoallergenic Jewellery Verification & Recommendation System</p>
+        <p class="mb-4">Wear with confidence. No more rashes, no more worries.</p>
+        <div class="d-flex justify-content-center gap-3">
+            <a href="/allersafe/shop" class="btn btn-light btn-lg px-4">
+                <i class="fas fa-shopping-bag me-2"></i>Shop Now
+            </a>
+            <a href="/allersafe/verify" class="btn btn-outline-light btn-lg px-4">
+                <i class="fas fa-qrcode me-2"></i>Verify Product
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Stats Section -->
+<section class="py-5 bg-dark text-white">
+    <div class="container">
+        <div class="row text-center">
+            <div class="col-md-3 mb-3">
+                <div class="display-4 fw-bold text-primary">10-20%</div>
+                <p>Population affected by metal allergies</p>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="display-4 fw-bold text-primary">9+</div>
+                <p>Hypoallergenic materials</p>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="display-4 fw-bold text-primary">100%</div>
+                <p>Verified products</p>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="display-4 fw-bold text-primary">24/7</div>
+                <p>Peace of mind</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Why Choose ALLERSAFE -->
+<section class="py-5">
+    <div class="container">
+        <h2 class="text-center mb-5">Why Choose ALLERSAFE?</h2>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card h-100 text-center shadow-sm border-0">
+                    <div class="card-body">
+                        <i class="fas fa-shield-alt fa-3x text-primary mb-3"></i>
+                        <h4>Verified Products</h4>
+                        <p>Every product undergoes rigorous verification for hypoallergenic safety. QR code verified.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 text-center shadow-sm border-0">
+                    <div class="card-body">
+                        <i class="fas fa-robot fa-3x text-primary mb-3"></i>
+                        <h4>AI Recommendations</h4>
+                        <p>Personalized suggestions based on your specific metal allergies and sensitivity level.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 text-center shadow-sm border-0">
+                    <div class="card-body">
+                        <i class="fas fa-qrcode fa-3x text-primary mb-3"></i>
+                        <h4>Instant Verification</h4>
+                        <p>Scan any QR code to instantly verify material composition and safety status.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Featured Products -->
+<section class="py-5 bg-light">
+    <div class="container">
+        <h2 class="text-center mb-5">Featured Hypoallergenic Jewellery</h2>
+        <div class="row g-4">
+            <% if (featuredProducts && featuredProducts.length > 0) { %>
+                <% featuredProducts.forEach(product => { %>
+                    <div class="col-md-3">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body">
+                                <span class="badge bg-success mb-2"><%= product.material_name %></span>
+                                <h5 class="card-title"><%= product.name %></h5>
+                                <p class="card-text text-muted small"><%= product.description.substring(0, 80) %>...</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="h5 text-primary mb-0">KSh <%= product.price.toFixed(2) %></span>
+                                    <a href="/allersafe/product/<%= product.slug %>" class="btn btn-sm btn-outline-primary">View</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            <% } else { %>
+                <div class="col-12 text-center">
+                    <p>Products coming soon...</p>
+                </div>
+            <% } %>
+        </div>
+        <div class="text-center mt-4">
+            <a href="/allersafe/shop" class="btn btn-primary">View All Products <i class="fas fa-arrow-right ms-2"></i></a>
+        </div>
+    </div>
+</section>
+
+<!-- Materials Guide -->
+<section class="py-5">
+    <div class="container">
+        <h2 class="text-center mb-5">Hypoallergenic Materials Guide</h2>
+        <div class="row g-4">
+            <% if (materials && materials.length > 0) { %>
+                <% materials.slice(0, 6).forEach(material => { %>
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h5 class="card-title"><%= material.material_name %></h5>
+                                    <span class="badge bg-<%= material.allergy_risk_level === 'safe' ? 'success' : (material.allergy_risk_level === 'low' ? 'info' : (material.allergy_risk_level === 'medium' ? 'warning' : 'danger')) %>">
+                                        <%= material.allergy_risk_level.toUpperCase() %>
+                                    </span>
+                                </div>
+                                <p class="card-text small"><%= material.description %></p>
+                                <small class="text-muted">Allergens: <%= material.common_allergens %></small>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            <% } %>
+        </div>
+        <div class="text-center mt-4">
+            <a href="/allersafe/materials" class="btn btn-outline-primary">View All Materials <i class="fas fa-arrow-right ms-2"></i></a>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="py-5 bg-primary text-white">
+    <div class="container text-center">
+        <h3>Ready to find jewellery that's safe for you?</h3>
+        <p class="mb-4">Create your allergy profile and get personalized recommendations.</p>
+        <% if (user) { %>
+            <a href="/allersafe/profile" class="btn btn-light btn-lg">Create Your Profile <i class="fas fa-arrow-right ms-2"></i></a>
+        <% } else { %>
+            <a href="/auth/register" class="btn btn-light btn-lg">Sign Up Free <i class="fas fa-arrow-right ms-2"></i></a>
+        <% } %>
+    </div>
+</section>
+
+<style>
+.allersafe-hero {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
+}
+.badge {
+    padding: 5px 10px;
+    border-radius: 20px;
+}
+</style>

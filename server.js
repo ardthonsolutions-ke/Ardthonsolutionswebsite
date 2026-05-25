@@ -179,6 +179,10 @@ app.get('/discord', (req, res) => {
   res.render('discord', { title: 'Join Our Discord - Ardthon Solutions' });
 });
 
+// ALLERSAFE Routes
+const allersafeRoutes = require('./routes/allersafe');
+app.use('/allersafe', allersafeRoutes);
+
 // Products
 app.get('/products', async (req, res) => {
   try {
