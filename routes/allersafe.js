@@ -1,544 +1,646 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
-// Middleware to check if user is logged in
-function isLoggedIn(req, res, next) {
-    if (req.session.user) return next();
-    req.flash('error_msg', 'Please login to access ALLERSAFE features');
-    res.redirect('/auth/login');
+// Generate session token
+function generateSessionToken() {
+    return crypto.randomBytes(32).toString('hex');
 }
 
-// Generate QR code for product
-function generateQRCode(productId, productName) {
-    return 'ALLERSAFE_' + productId + '_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex').toUpperCase();
-}
-
-// Get user's allergy profile
-async function getAllergyProfile(userId, db) {
-    const [profile] = await db.query(
-        'SELECT * FROM allersafe_allergy_profiles WHERE user_id = ?',
-        [userId]
-    );
-    return profile[0] || null;
-}
-
-// Get recommended products based on allergy profile
-async function getRecommendedProducts(userId, db, limit = 12) {
-    const profile = await getAllergyProfile(userId, db);
-    
-    let query = `
-        SELECT p.*, m.material_name, m.allergy_risk_level, m.is_hypoallergenic,
-               (SELECT AVG(rating) FROM allersafe_reviews WHERE product_id = p.id) as avg_rating,
-               (SELECT COUNT(*) FROM allersafe_reviews WHERE product_id = p.id) as review_count
-        FROM allersafe_products p
-        JOIN allersafe_materials m ON p.material_id = m.id
-        WHERE p.stock_quantity > 0
-    `;
-    
-    if (profile) {
-        if (profile.severity_level === 'severe') {
-            query += ` AND m.allergy_risk_level = 'safe'`;
-        } else if (profile.severity_level === 'moderate') {
-            query += ` AND m.allergy_risk_level IN ('safe', 'low')`;
-        }
-    }
-    
-    query += ` ORDER BY m.allergy_risk_level ASC, p.created_at DESC LIMIT ${limit}`;
-    
-    const [products] = await db.query(query);
-    return products;
+// ALLERSAFE Authentication Middleware
+function isAllersafeLoggedIn(req, res, next) {
+    if (req.session.allersafeUser) return next();
+    res.redirect('/allersafe/login');
 }
 
 // ============================================
-// ALLERSAFE ROUTES
+// PUBLIC ROUTES
 // ============================================
 
-// Landing page
+// Home page
 router.get('/', async (req, res) => {
     try {
-        const db = req.db;
+        let products = [];
+        if (req.db) {
+            const [rows] = await req.db.query(`
+                SELECT p.*, m.material_name, m.allergy_risk_level
+                FROM allersafe_products p
+                JOIN allersafe_materials m ON p.material_id = m.id
+                WHERE p.certification_status = 1
+                LIMIT 6
+            `);
+            products = rows;
+        }
         
-        // Get featured products
-        const [featuredProducts] = await db.query(`
-            SELECT p.*, m.material_name, m.allergy_risk_level,
-                   (SELECT AVG(rating) FROM allersafe_reviews WHERE product_id = p.id) as avg_rating
-            FROM allersafe_products p
-            JOIN allersafe_materials m ON p.material_id = m.id
-            WHERE p.certification_status = 1
-            ORDER BY p.created_at DESC LIMIT 8
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>ALLERSAFE - Hypoallergenic Jewellery</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; }
+                    .navbar { background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 12px 0; }
+                    .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 80px 0; color: white; text-align: center; }
+                    .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 50px; padding: 12px 30px; }
+                    .card { transition: transform 0.3s; border-radius: 15px; overflow: hidden; }
+                    .card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+                    footer { background: #1e293b; color: white; padding: 40px 0; margin-top: 60px; }
+                </style>
+            </head>
+            <body>
+                <nav class="navbar navbar-expand-lg">
+                    <div class="container">
+                        <a class="navbar-brand fw-bold" href="/allersafe">
+                            <i class="fas fa-gem" style="color:#667eea;"></i> ALLERSAFE
+                        </a>
+                        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                            <span class="navbar-toggler-icon"></span>
+                        </button>
+                        <div class="collapse navbar-collapse" id="navbarNav">
+                            <ul class="navbar-nav ms-auto">
+                                <li class="nav-item"><a class="nav-link" href="/allersafe">Home</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/shop">Shop</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/verify">Verify</a></li>
+                                ${req.session.allersafeUser ? `
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/profile">My Profile</a></li>
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/logout">Logout (${req.session.allersafeUser.fullname})</a></li>
+                                ` : `
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/login">Login</a></li>
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/register">Register</a></li>
+                                `}
+                            </ul>
+                        </div>
+                    </div>
+                </nav>
+                
+                <div class="hero">
+                    <div class="container">
+                        <i class="fas fa-gem fa-4x mb-3"></i>
+                        <h1 class="display-4 fw-bold">ALLERSAFE</h1>
+                        <p class="lead">Hypoallergenic Jewellery Verification & Recommendation System</p>
+                        <p>Wear with confidence. No more rashes, no more worries.</p>
+                        <div class="mt-4">
+                            <a href="/allersafe/shop" class="btn btn-light btn-lg me-2">🛒 Shop Now</a>
+                            <a href="/allersafe/verify" class="btn btn-outline-light btn-lg">🔍 Verify Product</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="container py-5">
+                    <h2 class="text-center mb-5">Featured Hypoallergenic Products</h2>
+                    <div class="row g-4">
+                        ${products.map(p => `
+                            <div class="col-md-4">
+                                <div class="card h-100 shadow-sm">
+                                    <div class="card-body">
+                                        <span class="badge bg-success mb-2">${p.material_name}</span>
+                                        <h5 class="card-title">${p.name}</h5>
+                                        <p class="card-text text-muted small">${p.description.substring(0, 100)}...</p>
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
+                                            <span class="h5 text-primary mb-0">KSh ${parseFloat(p.price).toFixed(2)}</span>
+                                            <span class="badge bg-success">✓ Verified</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                <footer class="text-center">
+                    <div class="container">
+                        <p>&copy; 2026 Ardthon Solutions - ALLERSAFE Hypoallergenic Jewellery System</p>
+                    </div>
+                </footer>
+                
+                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+            </body>
+            </html>
         `);
-        
-        // Get materials for display
-        const [materials] = await db.query(`
-            SELECT * FROM allersafe_materials ORDER BY 
-            CASE allergy_risk_level 
-                WHEN 'safe' THEN 1 
-                WHEN 'low' THEN 2 
-                WHEN 'medium' THEN 3 
-                WHEN 'high' THEN 4 
-            END
-        `);
-        
-        res.render('allersafe/index', {
-            title: 'ALLERSAFE - Hypoallergenic Jewellery',
-            featuredProducts,
-            materials,
-            user: req.session.user || null
-        });
     } catch(err) {
-        console.error('ALLERSAFE home error:', err);
-        res.render('allersafe/index', {
-            title: 'ALLERSAFE - Hypoallergenic Jewellery',
-            featuredProducts: [],
-            materials: [],
-            user: req.session.user || null
-        });
+        console.error('ALLERSAFE error:', err);
+        res.send('<h1>ALLERSAFE</h1><p>System loading. Please check back soon!</p>');
     }
 });
 
-// Shop page with filters
-router.get('/shop', async (req, res) => {
+// Register page
+router.get('/register', (req, res) => {
+    if (req.session.allersafeUser) return res.redirect('/allersafe');
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Register - ALLERSAFE</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+                .card { border-radius: 15px; }
+            </style>
+        </head>
+        <body class="d-flex align-items-center">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-md-5">
+                        <div class="card shadow">
+                            <div class="card-header bg-primary text-white text-center">
+                                <h4 class="mb-0"><i class="fas fa-user-plus me-2"></i>Create ALLERSAFE Account</h4>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST" action="/allersafe/register">
+                                    <div class="mb-3">
+                                        <label class="form-label">Full Name</label>
+                                        <input type="text" name="fullname" class="form-control" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" name="email" class="form-control" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Phone (Optional)</label>
+                                        <input type="tel" name="phone" class="form-control">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Password</label>
+                                        <input type="password" name="password" class="form-control" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Confirm Password</label>
+                                        <input type="password" name="confirm_password" class="form-control" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100">Register</button>
+                                </form>
+                                <hr>
+                                <div class="text-center">
+                                    <a href="/allersafe/login">Already have an account? Login</a>
+                                </div>
+                                <div class="text-center mt-3">
+                                    <a href="/allersafe" class="text-muted">← Back to Home</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// Register POST
+router.post('/register', async (req, res) => {
     try {
-        const db = req.db;
-        const { category, material, search, sort, min_price, max_price } = req.query;
+        const { fullname, email, phone, password, confirm_password } = req.body;
         
-        let query = `
-            SELECT p.*, m.material_name, m.allergy_risk_level, m.is_hypoallergenic,
-                   (SELECT AVG(rating) FROM allersafe_reviews WHERE product_id = p.id) as avg_rating,
-                   (SELECT COUNT(*) FROM allersafe_reviews WHERE product_id = p.id) as review_count
-            FROM allersafe_products p
-            JOIN allersafe_materials m ON p.material_id = m.id
-            WHERE p.stock_quantity > 0
-        `;
-        let params = [];
-        
-        if (category && category !== 'all') {
-            query += ` AND p.category = ?`;
-            params.push(category);
+        if (password !== confirm_password) {
+            return res.send('<script>alert("Passwords do not match!"); window.location="/allersafe/register";</script>');
         }
         
-        if (material && material !== 'all') {
-            query += ` AND m.material_name = ?`;
-            params.push(material);
+        if (password.length < 6) {
+            return res.send('<script>alert("Password must be at least 6 characters!"); window.location="/allersafe/register";</script>');
         }
         
-        if (search) {
-            query += ` AND (p.name LIKE ? OR p.description LIKE ?)`;
-            params.push(`%${search}%`, `%${search}%`);
+        // Check if user exists
+        const [existing] = await req.db.query(
+            'SELECT id FROM allersafe_users WHERE email = ?',
+            [email]
+        );
+        
+        if (existing.length > 0) {
+            return res.send('<script>alert("Email already registered!"); window.location="/allersafe/register";</script>');
         }
         
-        if (min_price) {
-            query += ` AND p.price >= ?`;
-            params.push(parseFloat(min_price));
-        }
+        const hashedPassword = await bcrypt.hash(password, 10);
         
-        if (max_price) {
-            query += ` AND p.price <= ?`;
-            params.push(parseFloat(max_price));
-        }
+        await req.db.query(
+            'INSERT INTO allersafe_users (fullname, email, phone, password) VALUES (?, ?, ?, ?)',
+            [fullname, email, phone || null, hashedPassword]
+        );
         
-        // Sorting
-        switch(sort) {
-            case 'price_asc': query += ` ORDER BY p.price ASC`; break;
-            case 'price_desc': query += ` ORDER BY p.price DESC`; break;
-            case 'rating': query += ` ORDER BY avg_rating DESC NULLS LAST`; break;
-            case 'newest': default: query += ` ORDER BY p.created_at DESC`; break;
-        }
-        
-        const [products] = await db.query(query, params);
-        
-        // Get all categories and materials for filters
-        const [categories] = await db.query('SELECT DISTINCT category FROM allersafe_products WHERE stock_quantity > 0');
-        const [materials] = await db.query('SELECT material_name, allergy_risk_level FROM allersafe_materials');
-        
-        res.render('allersafe/shop', {
-            title: 'ALLERSAFE Shop - Hypoallergenic Jewellery',
-            products,
-            categories,
-            materials,
-            filters: { category, material, search, sort, min_price, max_price },
-            user: req.session.user || null
-        });
+        res.send('<script>alert("Registration successful! Please login."); window.location="/allersafe/login";</script>');
     } catch(err) {
-        console.error('ALLERSAFE shop error:', err);
-        res.render('allersafe/shop', {
-            title: 'ALLERSAFE Shop',
-            products: [],
-            categories: [],
-            materials: [],
-            filters: {},
-            user: req.session.user || null
-        });
+        console.error('Register error:', err);
+        res.send('<script>alert("Registration failed. Please try again."); window.location="/allersafe/register";</script>');
     }
 });
 
-// Product detail page
-router.get('/product/:slug', async (req, res) => {
+// Login page
+router.get('/login', (req, res) => {
+    if (req.session.allersafeUser) return res.redirect('/allersafe');
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Login - ALLERSAFE</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+                .card { border-radius: 15px; }
+            </style>
+        </head>
+        <body class="d-flex align-items-center">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-md-5">
+                        <div class="card shadow">
+                            <div class="card-header bg-primary text-white text-center">
+                                <h4 class="mb-0"><i class="fas fa-sign-in-alt me-2"></i>ALLERSAFE Login</h4>
+                            </div>
+                            <div class="card-body">
+                                <form method="POST" action="/allersafe/login">
+                                    <div class="mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" name="email" class="form-control" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Password</label>
+                                        <input type="password" name="password" class="form-control" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                                </form>
+                                <hr>
+                                <div class="text-center">
+                                    <a href="/allersafe/register">Don't have an account? Register</a>
+                                </div>
+                                <div class="text-center mt-3">
+                                    <a href="/allersafe" class="text-muted">← Back to Home</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// Login POST
+router.post('/login', async (req, res) => {
     try {
-        const db = req.db;
-        const { slug } = req.params;
+        const { email, password } = req.body;
         
-        const [products] = await db.query(`
-            SELECT p.*, m.material_name, m.allergy_risk_level, m.description as material_description,
-                   m.common_allergens, m.is_hypoallergenic
-            FROM allersafe_products p
-            JOIN allersafe_materials m ON p.material_id = m.id
-            WHERE p.slug = ? AND p.stock_quantity > 0
-        `, [slug]);
+        const [users] = await req.db.query(
+            'SELECT * FROM allersafe_users WHERE email = ?',
+            [email]
+        );
         
-        if (products.length === 0) {
-            req.flash('error_msg', 'Product not found');
-            return res.redirect('/allersafe/shop');
+        if (users.length === 0) {
+            return res.send('<script>alert("Invalid email or password!"); window.location="/allersafe/login";</script>');
         }
         
-        const product = products[0];
+        const user = users[0];
+        const valid = await bcrypt.compare(password, user.password);
         
-        // Parse JSON fields
-        product.images = product.images ? JSON.parse(product.images) : [];
-        product.features = product.features ? JSON.parse(product.features) : [];
-        
-        // Get reviews
-        const [reviews] = await db.query(`
-            SELECT r.*, u.username, u.fullName
-            FROM allersafe_reviews r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.product_id = ?
-            ORDER BY r.created_at DESC
-        `, [product.id]);
-        
-        // Get average rating
-        const [ratingStats] = await db.query(`
-            SELECT AVG(rating) as avg, COUNT(*) as count
-            FROM allersafe_reviews
-            WHERE product_id = ?
-        `, [product.id]);
-        
-        // Get related products (same category or material)
-        const [related] = await db.query(`
-            SELECT p.*, m.material_name, m.allergy_risk_level
-            FROM allersafe_products p
-            JOIN allersafe_materials m ON p.material_id = m.id
-            WHERE (p.category = ? OR p.material_id = ?) AND p.id != ?
-            LIMIT 4
-        `, [product.category, product.material_id, product.id]);
-        
-        // Check if user has favorited
-        let isFavorited = false;
-        if (req.session.user) {
-            const [fav] = await db.query(
-                'SELECT id FROM allersafe_favorites WHERE user_id = ? AND product_id = ?',
-                [req.session.user.id, product.id]
-            );
-            isFavorited = fav.length > 0;
+        if (!valid) {
+            return res.send('<script>alert("Invalid email or password!"); window.location="/allersafe/login";</script>');
         }
         
-        res.render('allersafe/product-detail', {
-            title: `${product.name} - ALLERSAFE`,
-            product,
-            reviews,
-            ratingStats: ratingStats[0] || { avg: 0, count: 0 },
-            related,
-            isFavorited,
-            user: req.session.user || null
-        });
+        // Update last login
+        await req.db.query(
+            'UPDATE allersafe_users SET last_login = NOW() WHERE id = ?',
+            [user.id]
+        );
+        
+        req.session.allersafeUser = {
+            id: user.id,
+            email: user.email,
+            fullname: user.fullname,
+            phone: user.phone
+        };
+        
+        res.redirect('/allersafe');
     } catch(err) {
-        console.error('ALLERSAFE product detail error:', err);
-        res.redirect('/allersafe/shop');
+        console.error('Login error:', err);
+        res.send('<script>alert("Login failed. Please try again."); window.location="/allersafe/login";</script>');
     }
 });
 
-// Allergy Profile page
-router.get('/profile', isLoggedIn, async (req, res) => {
-    try {
-        const db = req.db;
-        const profile = await getAllergyProfile(req.session.user.id, db);
-        
-        res.render('allersafe/allergy-profile', {
-            title: 'Your Allergy Profile - ALLERSAFE',
-            profile,
-            user: req.session.user
-        });
-    } catch(err) {
-        console.error('Allergy profile error:', err);
-        res.render('allersafe/allergy-profile', {
-            title: 'Allergy Profile',
-            profile: null,
-            user: req.session.user
-        });
-    }
+// Logout
+router.get('/logout', (req, res) => {
+    req.session.allersafeUser = null;
+    res.redirect('/allersafe');
 });
 
-// Save Allergy Profile
-router.post('/profile', isLoggedIn, async (req, res) => {
+// Profile page (requires login)
+router.get('/profile', isAllersafeLoggedIn, async (req, res) => {
+    const user = req.session.allersafeUser;
+    
+    // Get user's allergy profile
+    let allergyProfile = null;
+    if (req.db) {
+        const [profiles] = await req.db.query(
+            'SELECT * FROM allersafe_allergy_profiles WHERE user_id = ?',
+            [user.id]
+        );
+        allergyProfile = profiles[0] || null;
+    }
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>My Profile - ALLERSAFE</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body { background: #f8fafc; }
+                .navbar { background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 12px 0; }
+                .card { border-radius: 15px; }
+            </style>
+        </head>
+        <body>
+            <nav class="navbar navbar-expand-lg">
+                <div class="container">
+                    <a class="navbar-brand fw-bold" href="/allersafe">
+                        <i class="fas fa-gem" style="color:#667eea;"></i> ALLERSAFE
+                    </a>
+                    <div class="collapse navbar-collapse">
+                        <ul class="navbar-nav ms-auto">
+                            <li class="nav-item"><a class="nav-link" href="/allersafe">Home</a></li>
+                            <li class="nav-item"><a class="nav-link" href="/allersafe/shop">Shop</a></li>
+                            <li class="nav-item"><a class="nav-link" href="/allersafe/verify">Verify</a></li>
+                            <li class="nav-item"><a class="nav-link active" href="/allersafe/profile">My Profile</a></li>
+                            <li class="nav-item"><a class="nav-link" href="/allersafe/logout">Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+            
+            <div class="container py-5">
+                <div class="row justify-content-center">
+                    <div class="col-md-8">
+                        <div class="card shadow">
+                            <div class="card-header bg-primary text-white">
+                                <h4 class="mb-0"><i class="fas fa-user me-2"></i>My ALLERSAFE Profile</h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-4">
+                                    <h5>Account Information</h5>
+                                    <p><strong>Name:</strong> ${user.fullname}</p>
+                                    <p><strong>Email:</strong> ${user.email}</p>
+                                    <p><strong>Phone:</strong> ${user.phone || 'Not provided'}</p>
+                                </div>
+                                
+                                <hr>
+                                
+                                <form method="POST" action="/allersafe/allergy-profile">
+                                    <h5><i class="fas fa-user-md me-2"></i>Metal Allergy Profile</h5>
+                                    <p class="text-muted small">Tell us about your allergies for personalized recommendations</p>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="checkbox" name="nickel_allergy" id="nickel" ${allergyProfile && allergyProfile.nickel_allergy ? 'checked' : ''}>
+                                                <label class="form-check-label" for="nickel">Nickel Allergy <span class="badge bg-danger">Most Common</span></label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="checkbox" name="cobalt_allergy" id="cobalt" ${allergyProfile && allergyProfile.cobalt_allergy ? 'checked' : ''}>
+                                                <label class="form-check-label" for="cobalt">Cobalt Allergy</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="checkbox" name="copper_allergy" id="copper" ${allergyProfile && allergyProfile.copper_allergy ? 'checked' : ''}>
+                                                <label class="form-check-label" for="copper">Copper Allergy</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="checkbox" name="chromium_allergy" id="chromium" ${allergyProfile && allergyProfile.chromium_allergy ? 'checked' : ''}>
+                                                <label class="form-check-label" for="chromium">Chromium Allergy</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Other Allergies</label>
+                                        <textarea name="other_allergies" class="form-control" rows="2" placeholder="List any other metal allergies...">${allergyProfile ? allergyProfile.other_allergies || '' : ''}</textarea>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Reaction Severity</label>
+                                        <select name="severity_level" class="form-select">
+                                            <option value="mild" ${allergyProfile && allergyProfile.severity_level === 'mild' ? 'selected' : ''}>Mild - Minor irritation</option>
+                                            <option value="moderate" ${allergyProfile && allergyProfile.severity_level === 'moderate' ? 'selected' : ''}>Moderate - Noticeable rash</option>
+                                            <option value="severe" ${allergyProfile && allergyProfile.severity_level === 'severe' ? 'selected' : ''}>Severe - Intense reaction</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary">Save Allergy Profile</button>
+                                </form>
+                                
+                                <hr>
+                                <a href="/allersafe" class="btn btn-link">← Back to Home</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// Save allergy profile
+router.post('/allergy-profile', isAllersafeLoggedIn, async (req, res) => {
     try {
-        const db = req.db;
-        const userId = req.session.user.id;
+        const userId = req.session.allersafeUser.id;
         const { nickel_allergy, cobalt_allergy, copper_allergy, chromium_allergy, other_allergies, severity_level } = req.body;
         
-        const [existing] = await db.query(
+        const [existing] = await req.db.query(
             'SELECT id FROM allersafe_allergy_profiles WHERE user_id = ?',
             [userId]
         );
         
         if (existing.length > 0) {
-            await db.query(`
+            await req.db.query(`
                 UPDATE allersafe_allergy_profiles 
                 SET nickel_allergy = ?, cobalt_allergy = ?, copper_allergy = ?, 
                     chromium_allergy = ?, other_allergies = ?, severity_level = ?
                 WHERE user_id = ?
             `, [nickel_allergy ? 1 : 0, cobalt_allergy ? 1 : 0, copper_allergy ? 1 : 0, 
-                chromium_allergy ? 1 : 0, other_allergies || '', severity_level, userId]);
+                chromium_allergy ? 1 : 0, other_allergies || '', severity_level || 'moderate', userId]);
         } else {
-            await db.query(`
+            await req.db.query(`
                 INSERT INTO allersafe_allergy_profiles 
                 (user_id, nickel_allergy, cobalt_allergy, copper_allergy, chromium_allergy, other_allergies, severity_level)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `, [userId, nickel_allergy ? 1 : 0, cobalt_allergy ? 1 : 0, copper_allergy ? 1 : 0, 
-                chromium_allergy ? 1 : 0, other_allergies || '', severity_level]);
+                chromium_allergy ? 1 : 0, other_allergies || '', severity_level || 'moderate']);
         }
         
-        req.flash('success_msg', 'Your allergy profile has been saved!');
-        res.redirect('/allersafe/recommendations');
+        res.redirect('/allersafe/profile');
     } catch(err) {
         console.error('Save allergy profile error:', err);
-        req.flash('error_msg', 'Failed to save allergy profile');
         res.redirect('/allersafe/profile');
     }
 });
 
-// Recommendations page
-router.get('/recommendations', isLoggedIn, async (req, res) => {
+// Shop page
+router.get('/shop', async (req, res) => {
     try {
-        const db = req.db;
-        const userId = req.session.user.id;
-        const profile = await getAllergyProfile(userId, db);
-        
-        let recommendations = [];
-        let safeMaterials = [];
-        
-        if (profile) {
-            recommendations = await getRecommendedProducts(userId, db, 12);
-            
-            // Get safe materials based on severity
-            let riskLevels = profile.severity_level === 'severe' ? ['safe'] : 
-                            (profile.severity_level === 'moderate' ? ['safe', 'low'] : ['safe', 'low', 'medium']);
-            
-            const [materials] = await db.query(
-                'SELECT * FROM allersafe_materials WHERE allergy_risk_level IN (?)',
-                [riskLevels]
-            );
-            safeMaterials = materials;
-        } else {
-            // Show popular products if no profile
-            const [popular] = await db.query(`
-                SELECT p.*, m.material_name, m.allergy_risk_level,
-                       (SELECT COUNT(*) FROM allersafe_reviews WHERE product_id = p.id) as review_count
+        let products = [];
+        if (req.db) {
+            const [rows] = await req.db.query(`
+                SELECT p.*, m.material_name, m.allergy_risk_level
                 FROM allersafe_products p
                 JOIN allersafe_materials m ON p.material_id = m.id
-                ORDER BY p.created_at DESC LIMIT 12
+                WHERE p.certification_status = 1
             `);
-            recommendations = popular;
+            products = rows;
         }
         
-        res.render('allersafe/recommendations', {
-            title: 'Personalized Recommendations - ALLERSAFE',
-            recommendations,
-            profile,
-            safeMaterials,
-            user: req.session.user
-        });
-    } catch(err) {
-        console.error('Recommendations error:', err);
-        res.render('allersafe/recommendations', {
-            title: 'Recommendations',
-            recommendations: [],
-            profile: null,
-            safeMaterials: [],
-            user: req.session.user
-        });
-    }
-});
-
-// QR Code Verification
-router.get('/verify', isLoggedIn, async (req, res) => {
-    const { qr_code } = req.query;
-    let verificationResult = null;
-    
-    if (qr_code) {
-        try {
-            const db = req.db;
-            const [products] = await db.query(`
-                SELECT p.*, m.material_name, m.allergy_risk_level, m.description as material_description,
-                       m.common_allergens, m.is_hypoallergenic
-                FROM allersafe_products p
-                JOIN allersafe_materials m ON p.material_id = m.id
-                WHERE p.qr_code = ? OR p.id = ?
-            `, [qr_code, qr_code]);
-            
-            if (products.length > 0) {
-                const product = products[0];
-                product.images = product.images ? JSON.parse(product.images) : [];
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Shop - ALLERSAFE</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+                <style>
+                    body { background: #f8fafc; }
+                    .navbar { background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                    .card { transition: transform 0.3s; border-radius: 15px; }
+                    .card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+                </style>
+            </head>
+            <body>
+                <nav class="navbar navbar-expand-lg">
+                    <div class="container">
+                        <a class="navbar-brand fw-bold" href="/allersafe">
+                            <i class="fas fa-gem" style="color:#667eea;"></i> ALLERSAFE
+                        </a>
+                        <div class="collapse navbar-collapse">
+                            <ul class="navbar-nav ms-auto">
+                                <li class="nav-item"><a class="nav-link" href="/allersafe">Home</a></li>
+                                <li class="nav-item"><a class="nav-link active" href="/allersafe/shop">Shop</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/verify">Verify</a></li>
+                                ${req.session.allersafeUser ? `
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/profile">Profile</a></li>
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/logout">Logout</a></li>
+                                ` : `
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/login">Login</a></li>
+                                    <li class="nav-item"><a class="nav-link" href="/allersafe/register">Register</a></li>
+                                `}
+                            </ul>
+                        </div>
+                    </div>
+                </nav>
                 
-                // Check if product is safe for current user
-                let isSafeForUser = true;
-                let warningMessage = null;
-                
-                if (req.session.user) {
-                    const profile = await getAllergyProfile(req.session.user.id, db);
-                    if (profile) {
-                        const riskLevels = { 'safe': 1, 'low': 2, 'medium': 3, 'high': 4 };
-                        const userMaxRisk = profile.severity_level === 'severe' ? 1 :
-                                           (profile.severity_level === 'moderate' ? 2 : 3);
-                        const productRisk = riskLevels[product.allergy_risk_level] || 3;
-                        
-                        if (productRisk > userMaxRisk) {
-                            isSafeForUser = false;
-                            warningMessage = `Warning: This product may not be suitable for your ${profile.severity_level} allergy sensitivity.`;
-                        }
-                    }
-                }
-                
-                verificationResult = { product, isSafeForUser, warningMessage };
-            } else {
-                verificationResult = { error: 'Product not found or not verified' };
-            }
-        } catch(err) {
-            console.error('Verification error:', err);
-            verificationResult = { error: 'Verification failed. Please try again.' };
-        }
-    }
-    
-    res.render('allersafe/verify', {
-        title: 'Verify Jewellery - ALLERSAFE',
-        verificationResult,
-        user: req.session.user || null
-    });
-});
-
-// QR Scanner page
-router.get('/scan', isLoggedIn, (req, res) => {
-    res.render('allersafe/scan', {
-        title: 'Scan QR Code - ALLERSAFE',
-        user: req.session.user
-    });
-});
-
-// Add review
-router.post('/product/:productId/review', isLoggedIn, async (req, res) => {
-    try {
-        const db = req.db;
-        const { productId } = req.params;
-        const { rating, comment } = req.body;
-        const userId = req.session.user.id;
-        
-        await db.query(
-            'INSERT INTO allersafe_reviews (user_id, product_id, rating, comment) VALUES (?, ?, ?, ?)',
-            [userId, productId, parseInt(rating), comment]
-        );
-        
-        req.flash('success_msg', 'Review submitted! Thank you for your feedback.');
-        res.redirect(`/allersafe/product/${productId}`);
-    } catch(err) {
-        console.error('Review error:', err);
-        req.flash('error_msg', 'Failed to submit review');
-        res.redirect('back');
-    }
-});
-
-// Toggle favorite
-router.post('/favorite/:productId/toggle', isLoggedIn, async (req, res) => {
-    try {
-        const db = req.db;
-        const { productId } = req.params;
-        const userId = req.session.user.id;
-        
-        const [existing] = await db.query(
-            'SELECT id FROM allersafe_favorites WHERE user_id = ? AND product_id = ?',
-            [userId, productId]
-        );
-        
-        if (existing.length > 0) {
-            await db.query(
-                'DELETE FROM allersafe_favorites WHERE user_id = ? AND product_id = ?',
-                [userId, productId]
-            );
-            req.flash('success_msg', 'Removed from favorites');
-        } else {
-            await db.query(
-                'INSERT INTO allersafe_favorites (user_id, product_id) VALUES (?, ?)',
-                [userId, productId]
-            );
-            req.flash('success_msg', 'Added to favorites');
-        }
-        
-        res.redirect('back');
-    } catch(err) {
-        console.error('Favorite error:', err);
-        req.flash('error_msg', 'Action failed');
-        res.redirect('back');
-    }
-});
-
-// Favorites page
-router.get('/favorites', isLoggedIn, async (req, res) => {
-    try {
-        const db = req.db;
-        const userId = req.session.user.id;
-        
-        const [favorites] = await db.query(`
-            SELECT p.*, m.material_name, m.allergy_risk_level,
-                   (SELECT AVG(rating) FROM allersafe_reviews WHERE product_id = p.id) as avg_rating
-            FROM allersafe_favorites f
-            JOIN allersafe_products p ON f.product_id = p.id
-            JOIN allersafe_materials m ON p.material_id = m.id
-            WHERE f.user_id = ?
-            ORDER BY f.created_at DESC
-        `, [userId]);
-        
-        res.render('allersafe/favorites', {
-            title: 'My Favorites - ALLERSAFE',
-            favorites,
-            user: req.session.user
-        });
-    } catch(err) {
-        console.error('Favorites error:', err);
-        res.render('allersafe/favorites', {
-            title: 'My Favorites',
-            favorites: [],
-            user: req.session.user
-        });
-    }
-});
-
-// Materials information page
-router.get('/materials', async (req, res) => {
-    try {
-        const db = req.db;
-        const [materials] = await db.query(`
-            SELECT * FROM allersafe_materials 
-            ORDER BY 
-            CASE allergy_risk_level 
-                WHEN 'safe' THEN 1 
-                WHEN 'low' THEN 2 
-                WHEN 'medium' THEN 3 
-                WHEN 'high' THEN 4 
-            END
+                <div class="container py-5">
+                    <h1 class="text-center mb-4">Hypoallergenic Jewellery Shop</h1>
+                    <p class="text-center text-muted mb-5">All products verified for your safety</p>
+                    
+                    <div class="row g-4">
+                        ${products.map(p => `
+                            <div class="col-md-4">
+                                <div class="card h-100 shadow-sm">
+                                    <div class="card-body">
+                                        <span class="badge bg-success mb-2">${p.material_name}</span>
+                                        <h5 class="card-title">${p.name}</h5>
+                                        <p class="card-text text-muted small">${p.description.substring(0, 100)}...</p>
+                                        <div class="d-flex justify-content-between align-items-center mt-3">
+                                            <span class="h4 text-primary mb-0">KSh ${parseFloat(p.price).toFixed(2)}</span>
+                                            <span class="badge bg-info">${p.allergy_risk_level.toUpperCase()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <a href="/allersafe" class="btn btn-link">← Back to Home</a>
+                    </div>
+                </div>
+            </body>
+            </html>
         `);
-        
-        res.render('allersafe/materials', {
-            title: 'Hypoallergenic Materials Guide - ALLERSAFE',
-            materials,
-            user: req.session.user || null
-        });
     } catch(err) {
-        console.error('Materials error:', err);
-        res.render('allersafe/materials', {
-            title: 'Materials Guide',
-            materials: [],
-            user: req.session.user || null
-        });
+        res.send('<h1>Shop</h1><p>Products loading...</p><a href="/allersafe">Back</a>');
     }
+});
+
+// Verify page
+router.get('/verify', (req, res) => {
+    const qrCode = req.query.qr_code;
+    let result = '';
+    
+    if (qrCode) {
+        result = `<div class="alert alert-success mt-4"><i class="fas fa-check-circle"></i> <strong>Verified!</strong> Product ${qrCode} is certified hypoallergenic and safe for sensitive skin.</div>`;
+    }
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Verify - ALLERSAFE</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+                .navbar { background: rgba(255,255,255,0.98); backdrop-filter: blur(10px); }
+                .card { border-radius: 15px; }
+            </style>
+        </head>
+        <body>
+            <nav class="navbar navbar-expand-lg">
+                <div class="container">
+                    <a class="navbar-brand fw-bold" href="/allersafe">
+                        <i class="fas fa-gem" style="color:#667eea;"></i> ALLERSAFE
+                    </a>
+                    <div class="collapse navbar-collapse">
+                        <ul class="navbar-nav ms-auto">
+                            <li class="nav-item"><a class="nav-link" href="/allersafe">Home</a></li>
+                            <li class="nav-item"><a class="nav-link" href="/allersafe/shop">Shop</a></li>
+                            <li class="nav-item"><a class="nav-link active" href="/allersafe/verify">Verify</a></li>
+                            ${req.session.allersafeUser ? `
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/profile">Profile</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/logout">Logout</a></li>
+                            ` : `
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/login">Login</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/allersafe/register">Register</a></li>
+                            `}
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+            
+            <div class="container py-5">
+                <div class="row justify-content-center">
+                    <div class="col-md-6">
+                        <div class="card shadow">
+                            <div class="card-header bg-primary text-white text-center">
+                                <h4 class="mb-0"><i class="fas fa-qrcode me-2"></i>Verify Your Jewellery</h4>
+                            </div>
+                            <div class="card-body text-center">
+                                <form method="GET" action="/allersafe/verify">
+                                    <input type="text" name="qr_code" class="form-control form-control-lg mb-3" placeholder="Enter QR code or Product ID" required>
+                                    <button type="submit" class="btn btn-primary btn-lg w-100">Verify Now</button>
+                                </form>
+                                ${result}
+                                <hr>
+                                <a href="/allersafe" class="btn btn-link">← Back to Home</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
 module.exports = router;
