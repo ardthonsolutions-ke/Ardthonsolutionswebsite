@@ -171,7 +171,6 @@ app.get('/', async (req, res) => {
 // ATTENDX - SCHOOL GATE ATTENDANCE SYSTEM
 // ============================================
 
-const crypto = require('crypto');
 
 // Generate unique API key
 function generateAttendXApiKey() {
@@ -926,7 +925,6 @@ app.get('/cuepay/register-device', (req, res) => {
 // CUEPAY COMPLETE SYSTEM
 // ============================================
 
-const crypto = require('crypto');
 
 // Generate unique API key
 function generateApiKey() {
