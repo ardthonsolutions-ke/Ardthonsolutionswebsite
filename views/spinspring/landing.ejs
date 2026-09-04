@@ -61,7 +61,12 @@ body { background: var(--ss-bg); }
   align-items: center;
   justify-content: center;
 }
-.ss-hero .hero-image i {
+.ss-hero .hero-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ss-hero .hero-image .placeholder-icon {
   font-size: 8rem;
   color: var(--ss-primary);
   opacity: 0.3;
@@ -144,6 +149,7 @@ body { background: var(--ss-bg); }
   width: 100%;
   height: 100%;
   object-fit: cover;
+  min-height: 250px;
 }
 .gallery-item .placeholder-icon {
   font-size: 4rem;
@@ -197,23 +203,24 @@ body { background: var(--ss-bg); }
   <div class="container position-relative">
     <div class="row align-items-center">
       <div class="col-lg-6 mb-4 mb-lg-0">
-        <span class="badge bg-white text-primary mb-3 px-3 py-2 rounded-pill" style="color:#0284c7 !important;">
+        <span class="badge bg-white px-3 py-2 rounded-pill" style="color:#0284c7;">
           <i class="fas fa-star me-1"></i> Smart Laundry Automation
         </span>
         <h1>SpinSpring</h1>
         <p class="tagline">Revolutionize your laundry business with IoT-powered washing machines, real-time monitoring, and smart order management.</p>
         <div class="d-flex flex-wrap gap-2">
-          <a href="/spinspg/login" class="btn btn-light btn-lg rounded-pill fw-bold">
-            <i class="fas fa-sign-in-alt me-2"></i> Get Started
+          <a href="#roles" class="btn btn-light btn-lg rounded-pill fw-bold">
+            <i class="fas fa-arrow-down me-2"></i> Access Portals
           </a>
-          <a href="#roles" class="btn btn-outline-light btn-lg rounded-pill">
-            <i class="fas fa-arrow-down me-2"></i> Learn More
+          <a href="#features" class="btn btn-outline-light btn-lg rounded-pill">
+            <i class="fas fa-info-circle me-2"></i> Learn More
           </a>
         </div>
       </div>
       <div class="col-lg-6">
         <div class="hero-image">
-           <img src="/images/spinspring/hero-image.jpg" alt="SpinSpring System" style="width:100%;height:100%;object-fit:cover;border-radius:20px;" onerror="this.style.display='none'">
+          <img src="/images/spinspring/dashboard.jpg" alt="SpinSpring Dashboard" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+          <i class="fas fa-washing-machine placeholder-icon" style="display:none;"></i>
         </div>
       </div>
     </div>
@@ -287,7 +294,7 @@ body { background: var(--ss-bg); }
 </section>
 
 <!-- Features -->
-<section class="py-5" style="background:var(--ss-bg);">
+<section id="features" class="py-5" style="background:var(--ss-bg);">
   <div class="container">
     <div class="text-center mb-5">
       <h2 style="color:var(--ss-dark);font-weight:800;">Key Features</h2>
@@ -335,36 +342,36 @@ body { background: var(--ss-bg); }
     </div>
     <div class="gallery-grid">
       <div class="gallery-item">
-        <i class="fas fa-washing-machine placeholder-icon"></i>
+        <img src="/images/spinspring/machine.jpg" alt="Washing Machine Unit" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+        <i class="fas fa-washing-machine placeholder-icon" style="display:none;"></i>
         <div class="gallery-overlay">
           <h6>Washing Machine Unit</h6>
           <small>ESP32 Controller</small>
         </div>
-        <!-- <img src="/images/spinspring/machine.jpg" alt="Machine"> -->
       </div>
       <div class="gallery-item">
-        <i class="fas fa-desktop placeholder-icon"></i>
+        <img src="/images/spinspring/dashboard.jpg" alt="Owner Dashboard" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+        <i class="fas fa-desktop placeholder-icon" style="display:none;"></i>
         <div class="gallery-overlay">
           <h6>Owner Dashboard</h6>
           <small>Full Business Control</small>
         </div>
-        <!-- <img src="/images/spinspring/dashboard.jpg" alt="Dashboard"> -->
       </div>
       <div class="gallery-item">
-        <i class="fas fa-mobile-alt placeholder-icon"></i>
+        <img src="/images/spinspring/mobile.jpg" alt="Mobile Access" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+        <i class="fas fa-mobile-alt placeholder-icon" style="display:none;"></i>
         <div class="gallery-overlay">
           <h6>Mobile Access</h6>
           <small>Customer Portal</small>
         </div>
-        <!-- <img src="/images/spinspring/mobile.jpg" alt="Mobile"> -->
       </div>
       <div class="gallery-item">
-        <i class="fas fa-lcd placeholder-icon"></i>
+        <img src="/images/spinspring/lcd.jpg" alt="LCD Display" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+        <i class="fas fa-tv placeholder-icon" style="display:none;"></i>
         <div class="gallery-overlay">
           <h6>LCD Display</h6>
           <small>2004 LCD Screen</small>
         </div>
-        <!-- <img src="/images/spinspring/lcd.jpg" alt="LCD"> -->
       </div>
     </div>
   </div>
@@ -373,11 +380,19 @@ body { background: var(--ss-bg); }
 <!-- CTA -->
 <section class="cta-section">
   <div class="container">
-    <h2 class="fw-bold mb-3">Ready to Automate Your Laundry?</h2>
-    <p class="mb-4" style="font-size:1.2rem;">Join SpinSpring today and transform your business</p>
-    <a href="/spinspg/register" class="btn btn-light btn-lg rounded-pill fw-bold">
-      <i class="fas fa-user-plus me-2"></i> Register as Owner
-    </a>
+    <h2 class="fw-bold mb-3">Ready to Access Your Portal?</h2>
+    <p class="mb-4" style="font-size:1.2rem;">Login below based on your role</p>
+    <div class="d-flex flex-wrap justify-content-center gap-3">
+      <a href="/spinspg/login" class="btn btn-light btn-lg rounded-pill fw-bold">
+        <i class="fas fa-store me-2"></i> Owner Login
+      </a>
+      <a href="/spinspg/attendant-login" class="btn btn-outline-light btn-lg rounded-pill">
+        <i class="fas fa-user-tie me-2"></i> Attendant Login
+      </a>
+      <a href="/spinspg/customer-login" class="btn btn-warning btn-lg rounded-pill fw-bold">
+        <i class="fas fa-id-card me-2"></i> Customer Login
+      </a>
+    </div>
   </div>
 </section>
 
