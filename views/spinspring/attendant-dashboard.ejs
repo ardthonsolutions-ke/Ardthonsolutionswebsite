@@ -1,0 +1,107 @@
+<%- include('../layouts/main') %>
+<style>
+.ss-nav { background: linear-gradient(135deg, #10b981, #059669); padding: 15px 0; }
+.ss-nav a { color: white !important; text-decoration: none; }
+.ss-card {
+  background: white;
+  border-radius: 20px;
+  padding: 25px;
+  box-shadow: 0 5px 25px rgba(16,185,129,0.1);
+  border: 1px solid #d1fae5;
+  margin-bottom: 20px;
+}
+.section-title {
+  color: #0c4a6e;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #d1fae5;
+  margin-bottom: 20px;
+}
+</style>
+</head>
+<body>
+<nav class="ss-nav">
+  <div class="container d-flex justify-content-between align-items-center">
+    <a href="/spinspg/attendant" class="brand text-white text-decoration-none" style="font-size:1.5rem;font-weight:800;">
+      <i class="fas fa-soap me-2"></i>SpinSpring
+    </a>
+    <div>
+      <span class="text-white me-2">Attendant: <%= user.name %></span>
+      <a href="/spinspg/logout" class="btn btn-danger btn-sm rounded-pill">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <h3 class="mb-4" style="color:#0c4a6e;">Attendant Panel</h3>
+
+  <!-- Machines -->
+  <div class="ss-card">
+    <div class="section-title"><i class="fas fa-washing-machine me-2"></i>Machines Under Your Care</div>
+    <div class="row g-3">
+      <% if (typeof devices !== 'undefined' && devices.length > 0) { %>
+        <% devices.forEach(function(d) { %>
+          <div class="col-md-4">
+            <div class="card">
+              <div class="card-body text-center">
+                <h6><%= d.device_name %></h6>
+                <span class="badge bg-<%= d.status === 'idle' ? 'success' : 'warning' %>"><%= d.status %></span>
+                <p class="mt-2 mb-1">Ksh <%= d.price_per_cycle %>/cycle</p>
+                <a href="/spinspg/device/<%= d.device_id %>" class="btn btn-sm btn-outline-primary rounded-pill">Control</a>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <p class="text-muted">No machines assigned</p>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Create Order -->
+  <div class="ss-card">
+    <div class="section-title"><i class="fas fa-receipt me-2"></i>Start New Order</div>
+    <form action="/spinspg/attendant/orders" method="POST">
+      <div class="row g-2">
+        <div class="col-md-3">
+          <select name="device_id" class="form-select" required>
+            <option value="">Select Machine</option>
+            <% devices.forEach(function(d) { %>
+              <option value="<%= d.device_id %>"><%= d.device_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select name="customer_id" class="form-select">
+            <option value="walk-in">Walk-in Customer</option>
+            <% if (typeof customers !== 'undefined') { %>
+              <% customers.forEach(function(c) { %>
+                <option value="<%= c.customer_unique_id %>"><%= c.full_name %> (<%= c.customer_unique_id %>)</option>
+              <% }) %>
+            <% } %>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <select name="service_type" class="form-select">
+            <option value="wash">Wash</option>
+            <option value="wash_dry">Wash + Dry</option>
+            <option value="dry_only">Dry Only</option>
+            <option value="dishwash">Dishwash</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <select name="cycle_type" class="form-select">
+            <option value="quick">Quick (15min)</option>
+            <option value="normal" selected>Normal (30min)</option>
+            <option value="heavy">Heavy (60min)</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-success w-100 rounded-pill">Start Order</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

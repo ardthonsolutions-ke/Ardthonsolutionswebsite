@@ -2321,6 +2321,333 @@ app.get('/spinspg/api/dashboard-data', isSpinAuth, async (req, res) => {
   }
 });
 
+
+// ============================================
+// SPINSPRING MULTI-ROLE SYSTEM
+// ============================================
+
+// Helper: Generate customer ID
+function generateCustomerId() {
+  return 'CUST-' + Date.now().toString(36).toUpperCase().slice(-4) + '-' + Math.random().toString(36).toUpperCase().slice(-4);
+}
+
+// Helper: Check if owner
+function isSpinOwner(req, res, next) {
+  if (req.session.spinUser && req.session.spinUser.role === 'owner') return next();
+  req.flash('error_msg', 'Owner access required');
+  res.redirect('/spinspg/dashboard');
+}
+
+// Helper: Check if attendant
+function isSpinAttendant(req, res, next) {
+  if (req.session.spinUser && (req.session.spinUser.role === 'attendant' || req.session.spinUser.role === 'owner')) return next();
+  req.flash('error_msg', 'Access denied');
+  res.redirect('/spinspg/login');
+}
+
+// ===== OWNER PANEL =====
+
+// Owner Dashboard (Full access)
+app.get('/spinspg/owner', isSpinOwner, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [userId]);
+    const [attendants] = await db.query('SELECT * FROM spinspg_attendants WHERE owner_id = ?', [userId]);
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ?', [userId]);
+    const [stats] = await db.query(
+      'SELECT SUM(today_revenue) as today_rev, SUM(total_revenue) as total_rev, SUM(cycles_completed) as total_cyc FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    res.render('spinspring/owner-dashboard', {
+      title: 'Owner Panel - SpinSpring',
+      devices, attendants, customers, stats: stats[0],
+      user: req.session.spinUser
+    });
+  } catch(err) {
+    res.render('spinspring/owner-dashboard', { title: 'Owner Panel', devices: [], attendants: [], customers: [], stats: {}, user: req.session.spinUser });
+  }
+});
+
+// Create Attendant
+app.post('/spinspg/owner/attendants', isSpinOwner, async (req, res) => {
+  try {
+    const { full_name, email, phone, pin_code, device_access } = req.body;
+    const ownerId = req.session.spinUser.id;
+    
+    // Check duplicate email
+    const [existing] = await db.query('SELECT id FROM spinspg_attendants WHERE email = ? AND owner_id = ?', [email, ownerId]);
+    if (existing.length > 0) {
+      req.flash('error_msg', 'Attendant email already exists');
+      return res.redirect('/spinspg/owner');
+    }
+    
+    await db.query(
+      'INSERT INTO spinspg_attendants (owner_id, full_name, email, phone, pin_code, device_access) VALUES (?, ?, ?, ?, ?, ?)',
+      [ownerId, full_name, email, phone, pin_code, JSON.stringify(device_access || [])]
+    );
+    req.flash('success_msg', 'Attendant created!');
+    res.redirect('/spinspg/owner');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to create attendant');
+    res.redirect('/spinspg/owner');
+  }
+});
+
+// Toggle Attendant Active
+app.post('/spinspg/owner/attendants/:id/toggle', isSpinOwner, async (req, res) => {
+  await db.query('UPDATE spinspg_attendants SET is_active = NOT is_active WHERE id = ? AND owner_id = ?', [req.params.id, req.session.spinUser.id]);
+  res.redirect('/spinspg/owner');
+});
+
+// Delete Attendant
+app.post('/spinspg/owner/attendants/:id/delete', isSpinOwner, async (req, res) => {
+  await db.query('DELETE FROM spinspg_attendants WHERE id = ? AND owner_id = ?', [req.params.id, req.session.spinUser.id]);
+  req.flash('success_msg', 'Attendant deleted');
+  res.redirect('/spinspg/owner');
+});
+
+// Create Customer
+app.post('/spinspg/owner/customers', isSpinOwner, async (req, res) => {
+  try {
+    const { full_name, phone, email } = req.body;
+    const ownerId = req.session.spinUser.id;
+    const customerId = generateCustomerId();
+    
+    // Check duplicate email if provided
+    if (email) {
+      const [existing] = await db.query('SELECT id FROM spinspg_customers WHERE email = ? AND owner_id = ?', [email, ownerId]);
+      if (existing.length > 0) {
+        req.flash('error_msg', 'Customer email already exists');
+        return res.redirect('/spinspg/owner');
+      }
+    }
+    
+    await db.query(
+      'INSERT INTO spinspg_customers (owner_id, customer_unique_id, full_name, phone, email) VALUES (?, ?, ?, ?, ?)',
+      [ownerId, customerId, full_name, phone, email || null]
+    );
+    req.flash('success_msg', 'Customer created with ID: ' + customerId);
+    res.redirect('/spinspg/owner');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to create customer');
+    res.redirect('/spinspg/owner');
+  }
+});
+
+// ===== ATTENDANT PANEL =====
+
+// Attendant Login
+app.get('/spinspg/attendant-login', (req, res) => {
+  res.render('spinspring/attendant-login', { title: 'Attendant Login - SpinSpring' });
+});
+
+app.post('/spinspg/attendant-login', async (req, res) => {
+  try {
+    const { email, pin_code } = req.body;
+    const [attendants] = await db.query(
+      'SELECT a.*, u.business_name, u.full_name as owner_name FROM spinspg_attendants a LEFT JOIN spinspg_users u ON a.owner_id = u.id WHERE a.email = ? AND a.pin_code = ? AND a.is_active = 1',
+      [email, pin_code]
+    );
+    
+    if (attendants.length === 0) {
+      req.flash('error_msg', 'Invalid attendant credentials');
+      return res.redirect('/spinspg/attendant-login');
+    }
+    
+    const attendant = attendants[0];
+    req.session.spinUser = {
+      id: attendant.id,
+      email: attendant.email,
+      name: attendant.full_name,
+      business: attendant.business_name,
+      role: 'attendant',
+      ownerId: attendant.owner_id,
+      deviceAccess: JSON.parse(attendant.device_access || '[]')
+    };
+    
+    res.redirect('/spinspg/attendant');
+  } catch(err) {
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/spinspg/attendant-login');
+  }
+});
+
+// Attendant Dashboard
+app.get('/spinspg/attendant', isSpinAttendant, async (req, res) => {
+  try {
+    const ownerId = req.session.spinUser.ownerId;
+    const deviceAccess = req.session.spinUser.deviceAccess || [];
+    
+    let devices;
+    if (deviceAccess.length > 0) {
+      const [result] = await db.query(
+        'SELECT * FROM spinspg_devices WHERE owner_id = ? AND device_id IN (?)',
+        [ownerId, deviceAccess]
+      );
+      devices = result;
+    } else {
+      const [result] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [ownerId]);
+      devices = result;
+    }
+    
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ?', [ownerId]);
+    
+    res.render('spinspring/attendant-dashboard', {
+      title: 'Attendant Panel - SpinSpring',
+      devices, customers,
+      user: req.session.spinUser
+    });
+  } catch(err) {
+    res.render('spinspring/attendant-dashboard', { title: 'Attendant Panel', devices: [], customers: [], user: req.session.spinUser });
+  }
+});
+
+// Attendant: Create Order
+app.post('/spinspg/attendant/orders', isSpinAttendant, async (req, res) => {
+  try {
+    const { device_id, customer_id, service_type, cycle_type, price, payment_status } = req.body;
+    const orderNumber = 'SS-' + Date.now().toString(36).toUpperCase();
+    
+    await db.query(
+      'INSERT INTO spinspg_orders (order_number, device_id, user_id, customer_name, service_type, cycle_type, price, payment_status, order_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [orderNumber, device_id, req.session.spinUser.ownerId, customer_id, service_type, cycle_type, price, payment_status, 'queued']
+    );
+    
+    // Update customer stats
+    await db.query('UPDATE spinspg_customers SET total_cycles = total_cycles + 1, total_spent = total_spent + ?, loyalty_points = loyalty_points + FLOOR(?/100) WHERE customer_unique_id = ?',
+      [price, price, customer_id]);
+    
+    req.flash('success_msg', 'Order created: ' + orderNumber);
+    res.redirect('/spinspg/attendant');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to create order');
+    res.redirect('/spinspg/attendant');
+  }
+});
+
+// ===== CUSTOMER PANEL =====
+
+// Customer Login (by unique ID)
+app.get('/spinspg/customer-login', (req, res) => {
+  res.render('spinspring/customer-login', { title: 'Customer Login - SpinSpring' });
+});
+
+app.post('/spinspg/customer-login', async (req, res) => {
+  try {
+    const { customer_id } = req.body;
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ? AND is_active = 1', [customer_id]);
+    
+    if (customers.length === 0) {
+      req.flash('error_msg', 'Invalid customer ID');
+      return res.redirect('/spinspg/customer-login');
+    }
+    
+    const customer = customers[0];
+    req.session.spinUser = {
+      id: customer.id,
+      name: customer.full_name,
+      customerId: customer.customer_unique_id,
+      role: 'customer',
+      ownerId: customer.owner_id
+    };
+    
+    res.redirect('/spinspg/customer');
+  } catch(err) {
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/spinspg/customer-login');
+  }
+});
+
+// Customer Dashboard
+app.get('/spinspg/customer', async (req, res) => {
+  if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
+    return res.redirect('/spinspg/customer-login');
+  }
+  
+  const customerId = req.session.spinUser.customerId;
+  const [customerData] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ?', [customerId]);
+  const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE customer_name = ? ORDER BY created_at DESC LIMIT 20', [customerId]);
+  
+  res.render('spinspring/customer-dashboard', {
+    title: 'My Account - SpinSpring',
+    customer: customerData[0],
+    orders,
+    user: req.session.spinUser
+  });
+});
+
+// Update login route to redirect based on role
+app.post('/spinspg/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const bcrypt = require('bcryptjs');
+    const [users] = await db.query('SELECT * FROM spinspg_users WHERE email = ? AND is_active = 1', [email]);
+    
+    if (users.length === 0) {
+      req.flash('error_msg', 'Invalid credentials');
+      return res.redirect('/spinspg/login');
+    }
+    
+    const match = await bcrypt.compare(password, users[0].password);
+    if (!match) {
+      req.flash('error_msg', 'Invalid credentials');
+      return res.redirect('/spinspg/login');
+    }
+    
+    req.session.spinUser = {
+      id: users[0].id,
+      email: users[0].email,
+      name: users[0].full_name,
+      business: users[0].business_name,
+      role: users[0].role || 'owner'
+    };
+    
+    // Redirect based on role
+    if (users[0].role === 'owner') {
+      res.redirect('/spinspg/owner');
+    } else if (users[0].role === 'attendant') {
+      res.redirect('/spinspg/attendant');
+    } else {
+      res.redirect('/spinspg/customer');
+    }
+  } catch(err) {
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/spinspg/login');
+  }
+});
+
+// Register route - set role as owner
+app.post('/spinspg/register', async (req, res) => {
+  try {
+    const { email, password, password2, full_name, business_name, phone } = req.body;
+    const bcrypt = require('bcryptjs');
+    
+    if (password !== password2) {
+      req.flash('error_msg', 'Passwords do not match');
+      return res.redirect('/spinspg/register');
+    }
+    
+    // Check duplicate email
+    const [existing] = await db.query('SELECT id FROM spinspg_users WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      req.flash('error_msg', 'Email already registered');
+      return res.redirect('/spinspg/register');
+    }
+    
+    const hash = await bcrypt.hash(password, 10);
+    await db.query(
+      "INSERT INTO spinspg_users (email, password, full_name, business_name, phone, role) VALUES (?, ?, ?, ?, ?, 'owner')",
+      [email, hash, full_name, business_name, phone]
+    );
+    
+    req.flash('success_msg', 'Account created! Login now.');
+    res.redirect('/spinspg/login');
+  } catch(err) {
+    req.flash('error_msg', 'Registration failed');
+    res.redirect('/spinspg/register');
+  }
+});
+
 // ===== MAINTENANCE LOG =====
 
 app.get('/cuepay/maintenance/:deviceId', isCuePayAuth, async (req, res) => {
