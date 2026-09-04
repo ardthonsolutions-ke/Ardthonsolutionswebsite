@@ -2504,16 +2504,40 @@ app.get('/spinspg/attendant', isSpinAttendant, async (req, res) => {
       devices = result;
     }
     
-    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ?', [ownerId]);
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ? AND is_active = 1', [ownerId]);
+    
+    // ADD THIS: Get active orders
+    const [activeOrders] = await db.query(
+      "SELECT o.*, d.device_name FROM spinspg_orders o LEFT JOIN spinspg_devices d ON o.device_id = d.device_id WHERE o.user_id = ? AND o.order_status IN ('queued', 'in_progress') ORDER BY o.created_at DESC",
+      [ownerId]
+    );
     
     res.render('spinspring/attendant-dashboard', {
       title: 'Attendant Panel - SpinSpring',
-      devices, customers,
+      devices, customers, activeOrders,
       user: req.session.spinUser
     });
   } catch(err) {
-    res.render('spinspring/attendant-dashboard', { title: 'Attendant Panel', devices: [], customers: [], user: req.session.spinUser });
+    res.render('spinspring/attendant-dashboard', {
+      title: 'Attendant Panel', 
+      devices: [], customers: [], activeOrders: [],
+      user: req.session.spinUser
+    });
   }
+});
+
+
+// API: Get customer active orders
+app.get('/spinspg/api/customer-orders', async (req, res) => {
+  if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
+    return res.json({ success: false });
+  }
+  const customerId = req.session.spinUser.customerId;
+  const [activeOrders] = await db.query(
+    "SELECT * FROM spinspg_orders WHERE customer_name = ? AND order_status IN ('queued', 'in_progress') ORDER BY created_at DESC",
+    [customerId]
+  );
+  res.json({ success: true, activeOrders });
 });
 
 // Attendant: Create Order
@@ -2572,7 +2596,6 @@ app.post('/spinspg/customer-login', async (req, res) => {
   }
 });
 
-// Customer Dashboard
 app.get('/spinspg/customer', async (req, res) => {
   if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
     return res.redirect('/spinspg/customer-login');
@@ -2582,10 +2605,16 @@ app.get('/spinspg/customer', async (req, res) => {
   const [customerData] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ?', [customerId]);
   const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE customer_name = ? ORDER BY created_at DESC LIMIT 20', [customerId]);
   
+  // ADD: Get active orders
+  const [activeOrders] = await db.query(
+    "SELECT * FROM spinspg_orders WHERE customer_name = ? AND order_status IN ('queued', 'in_progress') ORDER BY created_at DESC",
+    [customerId]
+  );
+  
   res.render('spinspring/customer-dashboard', {
     title: 'My Account - SpinSpring',
     customer: customerData[0],
-    orders,
+    orders, activeOrders,
     user: req.session.spinUser
   });
 });
