@@ -19,5 +19,3 @@
     Deny from all
 </FilesMatch>
 
-Options -Indexes
-AddDefaultCharset UTF-8
