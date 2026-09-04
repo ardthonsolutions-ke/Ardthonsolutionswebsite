@@ -2476,7 +2476,7 @@ app.post('/spinspg/attendant-login', async (req, res) => {
       business: attendant.business_name,
       role: 'attendant',
       ownerId: attendant.owner_id,
-      deviceAccess: JSON.parse(attendant.device_access || '[]')
+      deviceAccess: Array.isArray(attendant.device_access) ? attendant.device_access : (typeof attendant.device_access === 'string' ? JSON.parse(attendant.device_access) : [])
     };
     
     res.redirect('/spinspg/attendant');
