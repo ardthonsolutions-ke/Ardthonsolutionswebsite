@@ -67,7 +67,7 @@ function isBusinessHours() {
   const now = new Date();
   const hour = now.getHours();
   const day = now.getDay(); // 0=Sunday, 6=Saturday
-  
+
   // Business hours: Mon-Sat 8AM-10PM, Sun 10AM-8PM
   if (day === 0) { // Sunday
     return hour >= 10 && hour < 20;
@@ -197,29 +197,29 @@ app.post('/attendx/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const bcrypt = require('bcryptjs');
-    
+
     const [users] = await db.query('SELECT * FROM attendx_users WHERE email = ? AND is_active = 1', [email]);
-    
+
     if (users.length === 0) {
       req.flash('error_msg', 'Invalid AttendX credentials');
       return res.redirect('/attendx/login');
     }
-    
+
     const user = users[0];
     const match = await bcrypt.compare(password, user.password);
-    
+
     if (!match) {
       req.flash('error_msg', 'Invalid AttendX credentials');
       return res.redirect('/attendx/login');
     }
-    
+
     req.session.attendxUser = {
       id: user.id,
       email: user.email,
       name: user.full_name,
       institution: user.institution_name
     };
-    
+
     req.flash('success_msg', 'Welcome to AttendX!');
     res.redirect('/attendx/dashboard');
   } catch(err) {
@@ -239,24 +239,24 @@ app.post('/attendx/register', async (req, res) => {
   try {
     const { email, password, password2, full_name, institution_name, institution_type, phone } = req.body;
     const bcrypt = require('bcryptjs');
-    
+
     if (password !== password2) {
       req.flash('error_msg', 'Passwords do not match');
       return res.redirect('/attendx/register');
     }
-    
+
     const [existing] = await db.query('SELECT id FROM attendx_users WHERE email = ?', [email]);
     if (existing.length > 0) {
       req.flash('error_msg', 'Email already registered');
       return res.redirect('/attendx/register');
     }
-    
+
     const hash = await bcrypt.hash(password, 10);
     await db.query(
       'INSERT INTO attendx_users (email, password, full_name, institution_name, institution_type, phone) VALUES (?, ?, ?, ?, ?, ?)',
       [email, hash, full_name, institution_name, institution_type || 'School', phone]
     );
-    
+
     req.flash('success_msg', 'AttendX account created! Please login.');
     res.redirect('/attendx/login');
   } catch(err) {
@@ -276,12 +276,12 @@ app.get('/attendx/logout', (req, res) => {
 app.get('/attendx/dashboard', isAttendXAuth, async (req, res) => {
   try {
     const userId = req.session.attendxUser.id;
-    
+
     const [devices] = await db.query(
       'SELECT * FROM attendx_devices WHERE owner_id = ? ORDER BY created_at DESC',
       [userId]
     );
-    
+
     // Get stats for each device
     for (let device of devices) {
       const [todayEntries] = await db.query(
@@ -296,13 +296,13 @@ app.get('/attendx/dashboard', isAttendXAuth, async (req, res) => {
         'SELECT COUNT(*) as count FROM attendx_students WHERE device_id = ?',
         [device.device_id]
       );
-      
+
       device.today_entries = todayEntries[0].count;
       device.today_exits = todayExits[0].count;
       device.student_count = studentCount[0].count;
       device.is_online = device.status === 'online';
     }
-    
+
     res.render('attendx/dashboard', {
       title: 'AttendX Dashboard - Ardthon Solutions',
       devices,
@@ -328,17 +328,17 @@ app.post('/attendx/register-device', isAttendXAuth, async (req, res) => {
   try {
     const { device_name, location, mode } = req.body;
     const ownerId = req.session.attendxUser.id;
-    
+
     const deviceId = 'ATTENDX-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
     const apiKey = generateAttendXApiKey();
-    
+
     await db.query(
       `INSERT INTO attendx_devices (device_id, device_name, api_key, owner_id, location_area, mode, status)
        VALUES (?, ?, ?, ?, ?, ?, 'offline')`,
       [deviceId, device_name, apiKey, ownerId, location, mode || 'both']
     );
-    
-    req.session.newAttendXDevice = { device_id: deviceId, device_name, api_key };
+
+    req.session.newAttendXDevice = { device_id: deviceId, device_name, api_key: apiKey };
     req.flash('success_msg', 'Device registered successfully!');
     res.redirect('/attendx/device-credentials');
   } catch(err) {
@@ -361,41 +361,41 @@ app.get('/attendx/device/:deviceId', isAttendXAuth, async (req, res) => {
   try {
     const userId = req.session.attendxUser.id;
     const { deviceId } = req.params;
-    
+
     const [devices] = await db.query(
       'SELECT * FROM attendx_devices WHERE device_id = ? AND owner_id = ?',
       [deviceId, userId]
     );
-    
+
     if (devices.length === 0) {
       req.flash('error_msg', 'Device not found');
       return res.redirect('/attendx/dashboard');
     }
-    
+
     const device = devices[0];
-    
+
     // Get today's records
     const [records] = await db.query(
       'SELECT * FROM attendx_records WHERE device_id = ? ORDER BY recorded_at DESC LIMIT 50',
       [deviceId]
     );
-    
+
     // Get students
     const [students] = await db.query(
       'SELECT * FROM attendx_students WHERE device_id = ? ORDER BY full_name',
       [deviceId]
     );
-    
+
     // Get today stats
     const [todayStats] = await db.query(
-      `SELECT 
+      `SELECT
         SUM(CASE WHEN event_type = 'entry' THEN 1 ELSE 0 END) as entries,
         SUM(CASE WHEN event_type = 'exit' THEN 1 ELSE 0 END) as exits
-       FROM attendx_records 
+       FROM attendx_records
        WHERE device_id = ? AND DATE(recorded_at) = CURDATE()`,
       [deviceId]
     );
-    
+
     res.render('attendx/device-detail', {
       title: `${device.device_name} - AttendX`,
       device,
@@ -414,14 +414,14 @@ app.post('/attendx/device/:deviceId/student', isAttendXAuth, async (req, res) =>
   try {
     const { deviceId } = req.params;
     const { student_id, full_name, class_grade, parent_name, parent_phone, fingerprint_id } = req.body;
-    
+
     await db.query(
       `INSERT INTO attendx_students (device_id, student_id, full_name, class_grade, parent_name, parent_phone, fingerprint_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE full_name=VALUES(full_name), class_grade=VALUES(class_grade), parent_name=VALUES(parent_name), parent_phone=VALUES(parent_phone)`,
       [deviceId, student_id, full_name, class_grade, parent_name, parent_phone, fingerprint_id || null]
     );
-    
+
     req.flash('success_msg', 'Student registered!');
     res.redirect(`/attendx/device/${deviceId}`);
   } catch(err) {
@@ -438,28 +438,28 @@ app.post('/attendx/api/sync', async (req, res) => {
   try {
     const deviceId = req.headers['x-device-id'];
     const apiKey = req.headers['x-api-key'];
-    
+
     if (!deviceId || !apiKey) {
       return res.status(401).json({ error: 'Missing credentials' });
     }
-    
+
     const [devices] = await db.query(
       'SELECT * FROM attendx_devices WHERE device_id = ? AND api_key = ?',
       [deviceId, apiKey]
     );
-    
+
     if (devices.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     const data = req.body;
-    
+
     // Update device status
     await db.query(
       "UPDATE attendx_devices SET status = 'online', last_sync = NOW() WHERE device_id = ?",
       [deviceId]
     );
-    
+
     // Process attendance events
     if (data.events && Array.isArray(data.events)) {
       for (const event of data.events) {
@@ -468,21 +468,21 @@ app.post('/attendx/api/sync', async (req, res) => {
           'SELECT * FROM attendx_students WHERE device_id = ? AND (student_id = ? OR fingerprint_id = ?)',
           [deviceId, event.student_id, event.fingerprint_id]
         );
-        
+
         const student = students.length > 0 ? students[0] : null;
-        
+
         // Record attendance
         await db.query(
           'INSERT INTO attendx_records (device_id, student_id, student_name, event_type, parent_phone, sms_sent) VALUES (?, ?, ?, ?, ?, ?)',
           [deviceId, event.student_id, student ? student.full_name : 'Unknown', event.event_type, student ? student.parent_phone : null, 0]
         );
-        
+
         // Queue SMS if parent phone exists
         if (student && student.parent_phone) {
           const time = new Date().toLocaleTimeString('en-KE', { hour12: true });
           const action = event.event_type === 'entry' ? 'ARRIVED at' : 'DEPARTED from';
           const message = `${student.full_name} has ${action} school at ${time}. - ${devices[0].device_name}`;
-          
+
           await db.query(
             "INSERT INTO attendx_sms_log (device_id, student_id, parent_phone, message, status) VALUES (?, ?, ?, ?, 'pending')",
             [deviceId, event.student_id, student.parent_phone, message]
@@ -490,7 +490,7 @@ app.post('/attendx/api/sync', async (req, res) => {
         }
       }
     }
-    
+
     res.json({ status: 'success', message: 'Sync complete', timestamp: new Date().toISOString() });
   } catch(err) {
     console.error('AttendX sync error:', err);
@@ -506,7 +506,7 @@ app.get('/attendx/api/dashboard-data', isAttendXAuth, async (req, res) => {
       'SELECT device_id, device_name, status, last_sync FROM attendx_devices WHERE owner_id = ?',
       [userId]
     );
-    
+
     for (let device of devices) {
       const [entries] = await db.query(
         "SELECT COUNT(*) as count FROM attendx_records WHERE device_id = ? AND event_type = 'entry' AND DATE(recorded_at) = CURDATE()",
@@ -519,38 +519,27 @@ app.get('/attendx/api/dashboard-data', isAttendXAuth, async (req, res) => {
       device.today_entries = entries[0].count;
       device.today_exits = exits[0].count;
     }
-    
+
     res.json({ success: true, devices });
   } catch(err) {
     res.status(500).json({ success: false, error: 'Failed to load data' });
   }
 });
 
-// About
-app.get('/about', (req, res) => {
-  res.render('about', { title: 'About Us - Ardthon Solutions' });
-});
-
-// Contact
-app.get('/contact', (req, res) => {
-  res.render('contact', { title: 'Contact Us - Ardthon Solutions' });
-});
-
-// Discord
-app.get('/discord', (req, res) => {
-  res.render('discord', { title: 'Join Our Discord - Ardthon Solutions' });
-});
-
 // ALLERSAFE Routes
 const allersafeRoutes = require('./routes/allersafe');
+const attendxRoutes = require('./routes/attendx');
+const healthRoutes = require('./routes/health');
 app.use('/allersafe', allersafeRoutes);
+app.use('/attendx', attendxRoutes);
+app.use('/health', healthRoutes);
 
 // Products
 app.get('/products', async (req, res) => {
   try {
     const [products] = await db.query('SELECT * FROM products ORDER BY createdAt DESC');
     const [cats] = await db.query('SELECT DISTINCT category FROM products');
-    
+
     const formattedProducts = products.map(p => ({
       ...p,
       images: JSON.parse(p.images || '[]'),
@@ -580,7 +569,7 @@ app.get('/products', async (req, res) => {
 app.get('/products/:slug', async (req, res) => {
   try {
     const [products] = await db.query('SELECT * FROM products WHERE slug = ?', [req.params.slug]);
-    
+
     if (products.length === 0) {
       req.flash('error_msg', 'Product not found');
       return res.redirect('/products');
@@ -887,21 +876,21 @@ app.get('/cuepay/login', (req, res) => {
 app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
   try {
     const userId = req.session.cuepayUser.id;
-    
+
     // ONLY get devices belonging to THIS user
     const [devices] = await db.query(
       'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
       [userId]
     );
-    
+
     // Calculate battery percentage and time ago for each device
     devices.forEach(device => {
-      device.battery_percent = device.battery_voltage ? 
+      device.battery_percent = device.battery_voltage ?
         Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
       device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
       device.is_online = device.status === 'online';
     });
-    
+
     res.render('cuepay/dashboard', {
       title: 'CuePay Dashboard - Ardthon Solutions',
       devices,
@@ -942,21 +931,21 @@ function isCuePayAuth(req, res, next) {
 async function validateDeviceApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'];
   const deviceId = req.headers['x-device-id'];
-  
+
   if (!apiKey || !deviceId) {
     return res.status(401).json({ error: 'Missing credentials. Send x-api-key and x-device-id headers' });
   }
-  
+
   try {
     const [devices] = await db.query(
       'SELECT * FROM cuepay_devices WHERE device_id = ? AND api_key = ?',
       [deviceId, apiKey]
     );
-    
+
     if (devices.length === 0) {
       return res.status(401).json({ error: 'Invalid device credentials' });
     }
-    
+
     req.cuepayDevice = devices[0];
     next();
   } catch(err) {
@@ -982,29 +971,29 @@ app.post('/cuepay/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const bcrypt = require('bcryptjs');
-    
+
     const [users] = await db.query('SELECT * FROM cuepay_users WHERE email = ? AND is_active = 1', [email]);
-    
+
     if (users.length === 0) {
       req.flash('error_msg', 'Invalid CuePay credentials');
       return res.redirect('/cuepay/login');
     }
-    
+
     const user = users[0];
     const match = await bcrypt.compare(password, user.password);
-    
+
     if (!match) {
       req.flash('error_msg', 'Invalid CuePay credentials');
       return res.redirect('/cuepay/login');
     }
-    
+
     req.session.cuepayUser = {
       id: user.id,
       email: user.email,
       name: user.full_name,
       business: user.business_name
     };
-    
+
     req.flash('success_msg', 'Welcome to CuePay!');
     res.redirect('/cuepay/dashboard');
   } catch(err) {
@@ -1025,29 +1014,29 @@ app.post('/cuepay/register', async (req, res) => {
   try {
     const { email, password, password2, full_name, business_name, phone } = req.body;
     const bcrypt = require('bcryptjs');
-    
+
     if (password !== password2) {
       req.flash('error_msg', 'Passwords do not match');
       return res.redirect('/cuepay/register');
     }
-    
+
     if (password.length < 6) {
       req.flash('error_msg', 'Password must be at least 6 characters');
       return res.redirect('/cuepay/register');
     }
-    
+
     const [existing] = await db.query('SELECT id FROM cuepay_users WHERE email = ?', [email]);
     if (existing.length > 0) {
       req.flash('error_msg', 'Email already registered');
       return res.redirect('/cuepay/register');
     }
-    
+
     const hash = await bcrypt.hash(password, 10);
     await db.query(
       'INSERT INTO cuepay_users (email, password, full_name, business_name, phone) VALUES (?, ?, ?, ?, ?)',
       [email, hash, full_name || '', business_name || '', phone || '']
     );
-    
+
     req.flash('success_msg', 'CuePay account created! Please login.');
     res.redirect('/cuepay/login');
   } catch(err) {
@@ -1063,39 +1052,6 @@ app.get('/cuepay/logout', (req, res) => {
   res.redirect('/cuepay/login');
 });
 
-// CuePay Dashboard (requires auth)
-app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
-  try {
-    const userId = req.session.cuepayUser.id;
-    
-    const [devices] = await db.query(
-      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
-    
-    // Calculate battery percentage and time ago for each device
-    devices.forEach(device => {
-      device.battery_percent = device.battery_voltage ? 
-        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
-      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
-      device.is_online = device.status === 'online';
-    });
-    
-    res.render('cuepay/dashboard', {
-      title: 'CuePay Dashboard - Ardthon Solutions',
-      devices,
-      user: req.session.cuepayUser
-    });
-  } catch(err) {
-    console.error('CuePay dashboard error:', err);
-    res.render('cuepay/dashboard', {
-      title: 'CuePay Dashboard',
-      devices: [],
-      user: req.session.cuepayUser
-    });
-  }
-});
-
 // Register new device page
 app.get('/cuepay/register-device', isCuePayAuth, (req, res) => {
   res.render('cuepay/register-device', { title: 'Register New CuePay Device' });
@@ -1106,24 +1062,24 @@ app.post('/cuepay/register-device', isCuePayAuth, async (req, res) => {
   try {
     const { device_name, location, game_price } = req.body;
     const ownerId = req.session.cuepayUser.id;
-    
+
     // Generate unique device ID and API key
     const deviceId = 'CUEPAY-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
     const apiKey = generateApiKey();
-    
+
     await db.query(
       `INSERT INTO cuepay_devices (device_id, device_name, api_key, owner_id, location_area, game_price, status)
        VALUES (?, ?, ?, ?, ?, ?, 'offline')`,
       [deviceId, device_name, apiKey, ownerId, location, game_price || 10]
     );
-    
+
     // Store credentials in session to show once
     req.session.newDevice = {
       device_id: deviceId,
       device_name: device_name,
       api_key: apiKey
     };
-    
+
     req.flash('success_msg', 'Device registered successfully!');
     res.redirect('/cuepay/device-credentials');
   } catch(err) {
@@ -1137,10 +1093,10 @@ app.post('/cuepay/register-device', isCuePayAuth, async (req, res) => {
 app.get('/cuepay/device-credentials', isCuePayAuth, (req, res) => {
   const device = req.session.newDevice;
   if (!device) return res.redirect('/cuepay/dashboard');
-  
+
   // Clear from session after showing
   delete req.session.newDevice;
-  
+
   res.render('cuepay/device-credentials', {
     title: 'Device Credentials - CuePay',
     device
@@ -1164,7 +1120,7 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
     }
 
     const device = devices[0];
-    device.battery_percent = device.battery_voltage ? 
+    device.battery_percent = device.battery_voltage ?
       Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
     device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
 
@@ -1237,24 +1193,24 @@ app.post('/cuepay/device/:deviceId/command', isCuePayAuth, async (req, res) => {
     const { deviceId } = req.params;
     const { command_type, command_value } = req.body;
     const userId = req.session.cuepayUser.id;
-    
+
     // Verify device belongs to THIS user
     const [devices] = await db.query(
       'SELECT id FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
       [deviceId, userId]
     );
-    
+
     if (devices.length === 0) {
       req.flash('error_msg', 'Device not found or access denied');
       return res.redirect('/cuepay/dashboard');
     }
-    
+
     // Insert command
     await db.query(
       "INSERT INTO cuepay_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
       [deviceId, command_type, command_value]
     );
-    
+
  // Update device immediately based on command type
 if (command_type === 'change_price') {
   await db.query(
@@ -1290,10 +1246,10 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
   try {
     const device = req.cuepayDevice;
     const data = req.body;
-    
+
     // Update device live data
     await db.query(
-      `UPDATE cuepay_devices SET 
+      `UPDATE cuepay_devices SET
         status = 'online',
         battery_voltage = ?,
         gsm_connected = ?,
@@ -1313,7 +1269,7 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
         device.device_id
       ]
     );
-    
+
     // Save payments
     if (data.recent_payments && Array.isArray(data.recent_payments)) {
       for (const payment of data.recent_payments) {
@@ -1326,13 +1282,13 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
         }
       }
     }
-    
+
     // Get pending commands
     const [commands] = await db.query(
       "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
       [device.device_id]
     );
-    
+
     // Mark commands as sent
     if (commands.length > 0) {
       const commandIds = commands.map(c => c.id);
@@ -1341,13 +1297,13 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
         [commandIds]
       );
     }
-    
+
     // Get current device settings
     const [currentDevice] = await db.query(
       'SELECT game_price FROM cuepay_devices WHERE device_id = ?',
       [device.device_id]
     );
-    
+
     res.json({
       status: 'success',
       message: 'Sync complete',
@@ -1370,12 +1326,12 @@ app.get('/cuepay/api/device-status', validateDeviceApiKey, async (req, res) => {
     "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
     [req.cuepayDevice.device_id]
   );
-  
+
   const [device] = await db.query(
     'SELECT game_price FROM cuepay_devices WHERE device_id = ?',
     [req.cuepayDevice.device_id]
   );
-  
+
   res.json({
     status: 'ok',
     game_price: device[0]?.game_price || 10,
@@ -1390,7 +1346,7 @@ app.get('/cuepay/api/device-status', validateDeviceApiKey, async (req, res) => {
 // Helper: Get device stats for date range
 async function getDeviceStats(deviceId, startDate, endDate) {
   const [stats] = await db.query(
-    `SELECT 
+    `SELECT
       COUNT(*) as total_payments,
       COALESCE(SUM(games_earned), 0) as total_games,
       COALESCE(SUM(amount), 0) as total_revenue,
@@ -1398,7 +1354,7 @@ async function getDeviceStats(deviceId, startDate, endDate) {
       COUNT(DISTINCT customer_number) as unique_customers,
       MIN(payment_time) as first_payment,
       MAX(payment_time) as last_payment
-     FROM cuepay_payments 
+     FROM cuepay_payments
      WHERE device_id = ? AND payment_time >= ? AND payment_time <= ?`,
     [deviceId, startDate, endDate]
   );
@@ -1409,7 +1365,7 @@ async function getDeviceStats(deviceId, startDate, endDate) {
 async function getPeakHour(deviceId, date) {
   const [hours] = await db.query(
     `SELECT HOUR(payment_time) as hour, COUNT(*) as count, SUM(amount) as revenue
-     FROM cuepay_payments 
+     FROM cuepay_payments
      WHERE device_id = ? AND DATE(payment_time) = ?
      GROUP BY HOUR(payment_time)
      ORDER BY count DESC LIMIT 1`,
@@ -1433,7 +1389,7 @@ app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
 
     // Enrich each device with stats
     for (let device of devices) {
-      device.battery_percent = device.battery_voltage ? 
+      device.battery_percent = device.battery_voltage ?
         Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
       device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
       device.is_online = device.status === 'online';
@@ -1463,11 +1419,11 @@ app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
 
       // Daily breakdown for chart (last 7 days)
       const [dailyBreakdown] = await db.query(
-        `SELECT DATE(payment_time) as date, 
-                SUM(amount) as revenue, 
+        `SELECT DATE(payment_time) as date,
+                SUM(amount) as revenue,
                 SUM(games_earned) as games,
                 COUNT(*) as payments
-         FROM cuepay_payments 
+         FROM cuepay_payments
          WHERE device_id = ? AND payment_time >= ?
          GROUP BY DATE(payment_time)
          ORDER BY date DESC LIMIT 7`,
@@ -1516,7 +1472,7 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
     }
 
     const device = devices[0];
-    device.battery_percent = device.battery_voltage ? 
+    device.battery_percent = device.battery_voltage ?
       Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
 
     const today = new Date().toISOString().split('T')[0];
@@ -1534,12 +1490,12 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
 
     // Hourly breakdown for today
     const [hourlyBreakdown] = await db.query(
-      `SELECT HOUR(payment_time) as hour, 
-              SUM(amount) as revenue, 
+      `SELECT HOUR(payment_time) as hour,
+              SUM(amount) as revenue,
               SUM(games_earned) as games,
               COUNT(*) as payments,
               COUNT(DISTINCT customer_number) as customers
-       FROM cuepay_payments 
+       FROM cuepay_payments
        WHERE device_id = ? AND DATE(payment_time) = ?
        GROUP BY HOUR(payment_time)
        ORDER BY hour`,
@@ -1553,7 +1509,7 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
               SUM(games_earned) as games,
               COUNT(*) as payments,
               COUNT(DISTINCT customer_number) as customers
-       FROM cuepay_payments 
+       FROM cuepay_payments
        WHERE device_id = ? AND payment_time >= ?
        GROUP BY DATE(payment_time)
        ORDER BY date DESC`,
@@ -1568,7 +1524,7 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
               SUM(amount) as revenue,
               SUM(games_earned) as games,
               COUNT(*) as payments
-       FROM cuepay_payments 
+       FROM cuepay_payments
        WHERE device_id = ? AND payment_time >= ?
        GROUP BY YEARWEEK(payment_time, 1)
        ORDER BY yw DESC LIMIT 12`,
@@ -1582,7 +1538,7 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
               SUM(amount) as total_spent,
               SUM(games_earned) as total_games,
               MAX(payment_time) as last_visit
-       FROM cuepay_payments 
+       FROM cuepay_payments
        WHERE device_id = ? AND customer_number != 'Unknown'
        GROUP BY customer_number
        ORDER BY total_spent DESC LIMIT 10`,
@@ -1665,13 +1621,13 @@ app.get('/cuepay/api/analytics/:deviceId', isCuePayAuth, async (req, res) => {
 // Helper: Calculate customer retention
 async function getCustomerRetention(deviceId, days) {
   const [result] = await db.query(
-    `SELECT 
+    `SELECT
       COUNT(DISTINCT customer_number) as total_customers,
       COUNT(DISTINCT CASE WHEN visits >= 2 THEN customer_number END) as returning_customers,
       COUNT(DISTINCT CASE WHEN visits = 1 THEN customer_number END) as new_customers
      FROM (
        SELECT customer_number, COUNT(*) as visits
-       FROM cuepay_payments 
+       FROM cuepay_payments
        WHERE device_id = ? AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
          AND customer_number != 'Unknown'
        GROUP BY customer_number
@@ -1697,7 +1653,7 @@ app.get('/cuepay/reports/daily', isCuePayAuth, async (req, res) => {
     const reports = [];
     for (const device of devices) {
       const [stats] = await db.query(
-        `SELECT 
+        `SELECT
           COUNT(*) as payments,
           SUM(amount) as revenue,
           SUM(games_earned) as games,
@@ -1705,7 +1661,7 @@ app.get('/cuepay/reports/daily', isCuePayAuth, async (req, res) => {
           AVG(amount) as avg_payment,
           MIN(payment_time) as first_game,
           MAX(payment_time) as last_game
-         FROM cuepay_payments 
+         FROM cuepay_payments
          WHERE device_id = ? AND DATE(payment_time) = ?`,
         [device.device_id, date]
       );
@@ -1758,7 +1714,7 @@ app.get('/cuepay/reports/weekly', isCuePayAuth, async (req, res) => {
                 SUM(games_earned) as games,
                 COUNT(*) as payments,
                 COUNT(DISTINCT customer_number) as customers
-         FROM cuepay_payments 
+         FROM cuepay_payments
          WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
          GROUP BY DATE(payment_time)
          ORDER BY date DESC`,
@@ -1800,7 +1756,7 @@ app.get('/cuepay/reports/monthly', isCuePayAuth, async (req, res) => {
                 SUM(amount) as revenue,
                 SUM(games_earned) as games,
                 COUNT(*) as payments
-         FROM cuepay_payments 
+         FROM cuepay_payments
          WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?
          GROUP BY WEEK(payment_time, 1)
          ORDER BY week_num`,
@@ -1808,7 +1764,7 @@ app.get('/cuepay/reports/monthly', isCuePayAuth, async (req, res) => {
       );
 
       const [monthTotal] = await db.query(
-        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games, 
+        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games,
                 COUNT(*) as total_payments, COUNT(DISTINCT customer_number) as total_customers,
                 AVG(amount) as avg_payment
          FROM cuepay_payments WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
@@ -1816,17 +1772,17 @@ app.get('/cuepay/reports/monthly', isCuePayAuth, async (req, res) => {
       );
 
       // Previous month for growth comparison
-      const prevMonth = month.substring(5) === '01' ? 
-        (parseInt(month.substring(0,4)) - 1) + '-12' : 
+      const prevMonth = month.substring(5) === '01' ?
+        (parseInt(month.substring(0,4)) - 1) + '-12' :
         month.substring(0,5) + String(parseInt(month.substring(5)) - 1).padStart(2, '0');
 
       const [prevTotal] = await db.query(
-        `SELECT SUM(amount) as prev_revenue FROM cuepay_payments 
+        `SELECT SUM(amount) as prev_revenue FROM cuepay_payments
          WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
         [device.device_id, prevMonth]
       );
 
-      const growth = prevTotal[0].prev_revenue > 0 ? 
+      const growth = prevTotal[0].prev_revenue > 0 ?
         ((monthTotal[0].total_revenue - prevTotal[0].prev_revenue) / prevTotal[0].prev_revenue * 100) : 0;
 
       reports.push({ ...device, weekly: weeklyStats, total: monthTotal[0], growth: growth.toFixed(1) });
@@ -1879,7 +1835,7 @@ app.get('/cuepay/customers/:deviceId', isCuePayAuth, async (req, res) => {
               AVG(amount) as avg_spend,
               MAX(payment_time) as last_visit,
               MIN(payment_time) as first_visit
-       FROM cuepay_payments 
+       FROM cuepay_payments
        WHERE device_id = ? AND customer_number != 'Unknown'
        GROUP BY customer_number
        ORDER BY total_spent DESC LIMIT 20`,
@@ -1909,7 +1865,7 @@ app.get('/cuepay/compare', isCuePayAuth, async (req, res) => {
     const period = req.query.period || '7';
 
     const [devices] = await db.query(
-      `SELECT d.*, 
+      `SELECT d.*,
         (SELECT SUM(amount) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_revenue,
         (SELECT SUM(games_earned) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_games,
         (SELECT COUNT(*) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_payments
@@ -1995,6 +1951,374 @@ app.get('/cuepay/alerts', isCuePayAuth, async (req, res) => {
 app.post('/cuepay/alerts/toggle/:id', isCuePayAuth, async (req, res) => {
   await db.query('UPDATE cuepay_alerts SET is_enabled = NOT is_enabled WHERE id = ? AND owner_id = ?', [req.params.id, req.session.cuepayUser.id]);
   res.redirect('/cuepay/alerts');
+});
+
+
+// ============================================
+// SPINSPRING LAUNDRY AUTOMATION SYSTEM
+// ============================================
+
+const spinspgCrypto = require('crypto');
+
+function generateSpinApiKey() {
+  return 'SS-' + spinspgCrypto.randomBytes(16).toString('hex');
+}
+
+function isSpinAuth(req, res, next) {
+  if (req.session.spinUser) return next();
+  req.flash('error_msg', 'Please login to SpinSpring first');
+  res.redirect('/spinspg/login');
+}
+
+async function validateSpinApiKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+  const deviceId = req.headers['x-device-id'];
+  
+  if (!apiKey || !deviceId) {
+    return res.status(401).json({ error: 'Missing credentials' });
+  }
+  
+  try {
+    const [devices] = await db.query(
+      'SELECT * FROM spinspg_devices WHERE device_id = ? AND api_key = ?',
+      [deviceId, apiKey]
+    );
+    if (devices.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+    req.spinDevice = devices[0];
+    next();
+  } catch(err) {
+    res.status(500).json({ error: 'Auth error' });
+  }
+}
+
+// SpinSpring Pages
+app.get('/spinspg/login', (req, res) => {
+  if (req.session.spinUser) return res.redirect('/spinspg/dashboard');
+  res.render('spinspring/login', { title: 'SpinSpring Login' });
+});
+
+app.post('/spinspg/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const bcrypt = require('bcryptjs');
+    const [users] = await db.query('SELECT * FROM spinspg_users WHERE email = ? AND is_active = 1', [email]);
+    if (users.length === 0) {
+      req.flash('error_msg', 'Invalid credentials');
+      return res.redirect('/spinspg/login');
+    }
+    const match = await bcrypt.compare(password, users[0].password);
+    if (!match) {
+      req.flash('error_msg', 'Invalid credentials');
+      return res.redirect('/spinspg/login');
+    }
+    req.session.spinUser = {
+      id: users[0].id,
+      email: users[0].email,
+      name: users[0].full_name,
+      business: users[0].business_name
+    };
+    res.redirect('/spinspg/dashboard');
+  } catch(err) {
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/spinspg/login');
+  }
+});
+
+app.get('/spinspg/register', (req, res) => {
+  res.render('spinspring/register', { title: 'SpinSpring Register' });
+});
+
+app.post('/spinspg/register', async (req, res) => {
+  try {
+    const { email, password, password2, full_name, business_name, phone } = req.body;
+    const bcrypt = require('bcryptjs');
+    if (password !== password2) {
+      req.flash('error_msg', 'Passwords do not match');
+      return res.redirect('/spinspg/register');
+    }
+    const hash = await bcrypt.hash(password, 10);
+    await db.query(
+      'INSERT INTO spinspg_users (email, password, full_name, business_name, phone) VALUES (?, ?, ?, ?, ?)',
+      [email, hash, full_name, business_name, phone]
+    );
+    req.flash('success_msg', 'Account created! Login now.');
+    res.redirect('/spinspg/login');
+  } catch(err) {
+    req.flash('error_msg', 'Registration failed');
+    res.redirect('/spinspg/register');
+  }
+});
+
+app.get('/spinspg/logout', (req, res) => {
+  delete req.session.spinUser;
+  res.redirect('/spinspg/login');
+});
+
+// Dashboard
+app.get('/spinspg/dashboard', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query(
+      'SELECT * FROM spinspg_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+    const [orders] = await db.query(
+      'SELECT * FROM spinspg_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 10',
+      [userId]
+    );
+    const [stats] = await db.query(
+      'SELECT SUM(today_revenue) as today_rev, SUM(total_revenue) as total_rev, SUM(today_cycles) as today_cyc, SUM(cycles_completed) as total_cyc FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    res.render('spinspring/dashboard', {
+      title: 'SpinSpring Dashboard',
+      devices,
+      orders,
+      stats: stats[0],
+      user: req.session.spinUser
+    });
+  } catch(err) {
+    res.render('spinspring/dashboard', { title: 'SpinSpring Dashboard', devices: [], orders: [], stats: {}, user: req.session.spinUser });
+  }
+});
+
+// Register Device
+app.get('/spinspg/register-device', isSpinAuth, (req, res) => {
+  res.render('spinspring/register-device', { title: 'Register Device - SpinSpring' });
+});
+
+app.post('/spinspg/register-device', isSpinAuth, async (req, res) => {
+  try {
+    const { device_name, device_type, location, price_per_cycle } = req.body;
+    const ownerId = req.session.spinUser.id;
+    const deviceId = 'SPIN-' + Date.now().toString(36).toUpperCase() + '-' + spinspgCrypto.randomBytes(3).toString('hex').toUpperCase();
+    const apiKey = generateSpinApiKey();
+    await db.query(
+      `INSERT INTO spinspg_devices (device_id, device_name, device_type, api_key, owner_id, location_area, price_per_cycle, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'offline')`,
+      [deviceId, device_name, device_type, apiKey, ownerId, location, price_per_cycle || 300]
+    );
+    req.session.newSpinDevice = { device_id: deviceId, device_name, api_key };
+    res.redirect('/spinspg/device-credentials');
+  } catch(err) {
+    req.flash('error_msg', 'Registration failed');
+    res.redirect('/spinspg/register-device');
+  }
+});
+
+app.get('/spinspg/device-credentials', isSpinAuth, (req, res) => {
+  const device = req.session.newSpinDevice;
+  if (!device) return res.redirect('/spinspg/dashboard');
+  delete req.session.newSpinDevice;
+  res.render('spinspring/device-credentials', { title: 'Device Credentials', device });
+});
+
+// Device Detail
+app.get('/spinspg/device/:deviceId', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query(
+      'SELECT * FROM spinspg_devices WHERE device_id = ? AND owner_id = ?',
+      [req.params.deviceId, userId]
+    );
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Device not found');
+      return res.redirect('/spinspg/dashboard');
+    }
+    const device = devices[0];
+    const [orders] = await db.query(
+      'SELECT * FROM spinspg_orders WHERE device_id = ? ORDER BY created_at DESC LIMIT 20',
+      [req.params.deviceId]
+    );
+    const [payments] = await db.query(
+      'SELECT * FROM spinspg_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 20',
+      [req.params.deviceId]
+    );
+    res.render('spinspring/device-detail', {
+      title: device.device_name + ' - SpinSpring',
+      device,
+      orders,
+      payments
+    });
+  } catch(err) {
+    res.redirect('/spinspg/dashboard');
+  }
+});
+
+// Orders
+app.get('/spinspg/orders', isSpinAuth, async (req, res) => {
+  const userId = req.session.spinUser.id;
+  const [orders] = await db.query(
+    'SELECT o.*, d.device_name FROM spinspg_orders o LEFT JOIN spinspg_devices d ON o.device_id = d.device_id WHERE o.user_id = ? ORDER BY o.created_at DESC LIMIT 50',
+    [userId]
+  );
+  res.render('spinspring/orders', { title: 'Orders - SpinSpring', orders });
+});
+
+// Send Command
+app.post('/spinspg/device/:deviceId/command', isSpinAuth, async (req, res) => {
+  try {
+    const { command_type, command_value } = req.body;
+    await db.query(
+      "INSERT INTO spinspg_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
+      [req.params.deviceId, command_type, command_value]
+    );
+    
+    if (command_type === 'start_cycle') {
+      await db.query("UPDATE spinspg_devices SET status = 'running', current_cycle = ?, cycle_progress = 0 WHERE device_id = ?", [command_value, req.params.deviceId]);
+    } else if (command_type === 'stop') {
+      await db.query("UPDATE spinspg_devices SET status = 'idle', current_cycle = NULL, cycle_progress = 0 WHERE device_id = ?", [req.params.deviceId]);
+    } else if (command_type === 'change_price') {
+      await db.query('UPDATE spinspg_devices SET price_per_cycle = ? WHERE device_id = ?', [parseFloat(command_value), req.params.deviceId]);
+    }
+    
+    req.flash('success_msg', 'Command sent!');
+    res.redirect(`/spinspg/device/${req.params.deviceId}`);
+  } catch(err) {
+    req.flash('error_msg', 'Command failed');
+    res.redirect(`/spinspg/device/${req.params.deviceId}`);
+  }
+});
+
+// API: Sync
+app.post('/spinspg/api/sync', validateSpinApiKey, async (req, res) => {
+  try {
+    const device = req.spinDevice;
+    const data = req.body;
+    
+    await db.query(
+      `UPDATE spinspg_devices SET 
+        status = ?,
+        current_cycle = ?,
+        cycle_progress = ?,
+        water_temp = ?,
+        water_level = ?,
+        door_locked = ?,
+        error_code = ?,
+        cycles_completed = ?,
+        total_runtime_minutes = ?,
+        today_revenue = ?,
+        total_revenue = ?,
+        today_cycles = ?,
+        last_sync = NOW()
+       WHERE device_id = ?`,
+      [
+        data.status || 'idle',
+        data.current_cycle || null,
+        data.cycle_progress || 0,
+        data.water_temp || 0,
+        data.water_level || 0,
+        data.door_locked ? 1 : 0,
+        data.error_code || null,
+        data.cycles_completed || 0,
+        data.total_runtime_minutes || 0,
+        data.today_revenue || 0,
+        data.total_revenue || 0,
+        data.today_cycles || 0,
+        device.device_id
+      ]
+    );
+    
+    const [commands] = await db.query(
+      "SELECT * FROM spinspg_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
+      [device.device_id]
+    );
+    
+    if (commands.length > 0) {
+      const ids = commands.map(c => c.id);
+      await db.query("UPDATE spinspg_commands SET status = 'sent' WHERE id IN (?)", [ids]);
+    }
+    
+    res.json({
+      status: 'success',
+      commands: commands.map(c => ({ type: c.command_type, value: c.command_value })),
+      current_price: device.price_per_cycle
+    });
+  } catch(err) {
+    res.status(500).json({ error: 'Sync failed' });
+  }
+});
+
+// API: Time
+app.get('/spinspg/api/time', (req, res) => {
+  const now = new Date();
+  res.json({
+    timestamp: now.toISOString(),
+    time: now.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', hour12: false }),
+    date: now.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' })
+  });
+});
+
+
+// SpinSpring Reports
+app.get('/spinspg/reports', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [userId]);
+    const [orders] = await db.query(
+      'SELECT o.*, d.device_name FROM spinspg_orders o LEFT JOIN spinspg_devices d ON o.device_id = d.device_id WHERE o.user_id = ? ORDER BY o.created_at DESC LIMIT 20',
+      [userId]
+    );
+    const [stats] = await db.query(
+      'SELECT SUM(today_revenue) as today_rev, SUM(total_revenue) as total_rev, SUM(today_cycles) as today_cyc, SUM(cycles_completed) as total_cyc FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    res.render('spinspring/reports', { title: 'Reports - SpinSpring', devices, orders, stats: stats[0] });
+  } catch(err) {
+    res.render('spinspring/reports', { title: 'Reports - SpinSpring', devices: [], orders: [], stats: {} });
+  }
+});
+
+// Order Detail
+app.get('/spinspg/order/:orderId', isSpinAuth, async (req, res) => {
+  try {
+    const [orders] = await db.query(
+      'SELECT o.*, d.device_name FROM spinspg_orders o LEFT JOIN spinspg_devices d ON o.device_id = d.device_id WHERE o.id = ?',
+      [req.params.orderId]
+    );
+    if (orders.length === 0) {
+      req.flash('error_msg', 'Order not found');
+      return res.redirect('/spinspg/orders');
+    }
+    res.render('spinspring/order-detail', { title: 'Order Details - SpinSpring', order: orders[0] });
+  } catch(err) {
+    res.redirect('/spinspg/orders');
+  }
+});
+
+// SpinSpring Settings
+app.get('/spinspg/settings', isSpinAuth, (req, res) => {
+  res.render('spinspring/settings', {
+    title: 'Settings - SpinSpring',
+    user: req.session.spinUser
+  });
+});
+
+app.post('/spinspg/settings/business', isSpinAuth, async (req, res) => {
+  try {
+    const { business_name, phone } = req.body;
+    await db.query('UPDATE spinspg_users SET business_name = ?, phone = ? WHERE id = ?',
+      [business_name, phone, req.session.spinUser.id]);
+    req.session.spinUser.business = business_name;
+    req.flash('success_msg', 'Business info updated!');
+  } catch(err) {
+    req.flash('error_msg', 'Update failed');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+// SpinSpring API for dashboard refresh
+app.get('/spinspg/api/dashboard-data', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query(
+      'SELECT device_id, device_name, status, current_cycle, cycle_progress, today_revenue, cycles_completed FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    res.json({ success: true, devices });
+  } catch(err) {
+    res.json({ success: false, devices: [] });
+  }
 });
 
 // ===== MAINTENANCE LOG =====
@@ -2139,7 +2463,7 @@ app.get('/admin', isAdmin, async (req, res) => {
     `);
 
     const [stats] = await db.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total_devices,
         SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online_devices,
         SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline_devices,
@@ -2185,7 +2509,7 @@ app.get('/admin/device/:deviceId', isAdmin, async (req, res) => {
     }
 
     const device = devices[0];
-    device.battery_percent = device.battery_voltage ? 
+    device.battery_percent = device.battery_voltage ?
       Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
 
     const [payments] = await db.query(
@@ -2243,7 +2567,7 @@ app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
       );
     }
 
-    
+
 
     req.flash('success_msg', `Command "${command_type}" sent to ${deviceId}`);
     res.redirect(`/admin/device/${deviceId}`);
@@ -2295,7 +2619,7 @@ app.post('/admin/device/:deviceId/reset-revenue', isAdmin, async (req, res) => {
 app.get('/admin/users', isAdmin, async (req, res) => {
   try {
     const [users] = await db.query(`
-      SELECT u.*, 
+      SELECT u.*,
         (SELECT COUNT(*) FROM cuepay_devices WHERE owner_id = u.id) as device_count,
         (SELECT SUM(total_revenue) FROM cuepay_devices WHERE owner_id = u.id) as total_revenue
       FROM cuepay_users u
@@ -2369,10 +2693,10 @@ setInterval(async () => {
   try {
     // Find devices offline for more than 15 minutes
     const [offlineDevices] = await db.query(`
-      SELECT d.*, u.email, u.full_name 
+      SELECT d.*, u.email, u.full_name
       FROM cuepay_devices d
       LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      WHERE d.status = 'offline' 
+      WHERE d.status = 'offline'
         AND d.last_sync IS NOT NULL
         AND d.last_sync < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
         AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
@@ -2380,8 +2704,8 @@ setInterval(async () => {
 
     for (const device of offlineDevices) {
       const [recentAlerts] = await db.query(
-        `SELECT id FROM cuepay_alert_history 
-         WHERE device_id = ? AND alert_type = 'device_offline' 
+        `SELECT id FROM cuepay_alert_history
+         WHERE device_id = ? AND alert_type = 'device_offline'
          AND created_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)`,
         [device.device_id]
       );
@@ -2394,7 +2718,7 @@ setInterval(async () => {
         }
 
         await db.query(
-          `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message) 
+          `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message)
            VALUES (?, ?, 'device_offline', ?)`,
           [device.owner_id, device.device_id, 'Device offline for ' + Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000) + ' minutes']
         );
@@ -2403,7 +2727,7 @@ setInterval(async () => {
 
     // Low games alert
     const [lowGamesDevices] = await db.query(`
-      SELECT d.*, u.email, u.full_name 
+      SELECT d.*, u.email, u.full_name
       FROM cuepay_devices d
       LEFT JOIN cuepay_users u ON d.owner_id = u.id
       WHERE d.games_available <= 5 AND d.games_available > 0
@@ -2412,8 +2736,8 @@ setInterval(async () => {
 
     for (const device of lowGamesDevices) {
       const [recentAlerts] = await db.query(
-        `SELECT id FROM cuepay_alert_history 
-         WHERE device_id = ? AND alert_type = 'low_games' 
+        `SELECT id FROM cuepay_alert_history
+         WHERE device_id = ? AND alert_type = 'low_games'
          AND created_at > DATE_SUB(NOW(), INTERVAL 4 HOUR)`,
         [device.device_id]
       );
@@ -2426,7 +2750,7 @@ setInterval(async () => {
 
     // Low battery alert
     const [lowBatteryDevices] = await db.query(`
-      SELECT d.*, u.email, u.full_name 
+      SELECT d.*, u.email, u.full_name
       FROM cuepay_devices d
       LEFT JOIN cuepay_users u ON d.owner_id = u.id
       WHERE d.battery_voltage <= 10.5 AND d.battery_voltage > 0
@@ -2435,8 +2759,8 @@ setInterval(async () => {
 
     for (const device of lowBatteryDevices) {
       const [recentAlerts] = await db.query(
-        `SELECT id FROM cuepay_alert_history 
-         WHERE device_id = ? AND alert_type = 'low_battery' 
+        `SELECT id FROM cuepay_alert_history
+         WHERE device_id = ? AND alert_type = 'low_battery'
          AND created_at > DATE_SUB(NOW(), INTERVAL 6 HOUR)`,
         [device.device_id]
       );
@@ -2459,8 +2783,8 @@ setInterval(async () => {
   if (now.getHours() === 0 && now.getMinutes() <= 1) {
     try {
       await db.query(`
-        UPDATE cuepay_devices 
-        SET today_revenue = 0, today_games = 0 
+        UPDATE cuepay_devices
+        SET today_revenue = 0, today_games = 0
         WHERE last_sync < DATE_SUB(NOW(), INTERVAL 1 HOUR)
       `);
       console.log('Midnight reset: cleared today stats');
@@ -2477,7 +2801,7 @@ app.post('/api/push/subscribe', async (req, res) => {
   try {
     const subscription = req.body;
     const userId = req.session.cuepayUser ? req.session.cuepayUser.id : null;
-    
+
     // Store subscription (create table if needed)
     await db.query(`CREATE TABLE IF NOT EXISTS push_subscriptions (
       id int NOT NULL AUTO_INCREMENT,
@@ -2486,10 +2810,10 @@ app.post('/api/push/subscribe', async (req, res) => {
       created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-    
+
     await db.query('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)',
       [userId, JSON.stringify(subscription)]);
-    
+
     res.json({ success: true });
   } catch(err) {
     res.status(500).json({ error: 'Failed to subscribe' });
@@ -2500,7 +2824,7 @@ app.post('/api/push/subscribe', async (req, res) => {
 async function sendPushNotification(title, body, url = '/cuepay/dashboard') {
   try {
     const [subscriptions] = await db.query('SELECT subscription FROM push_subscriptions');
-    
+
     for (const sub of subscriptions) {
       const subscription = JSON.parse(sub.subscription);
       // You would use web-push library here
@@ -2528,14 +2852,14 @@ app.get('/health', async (req, res) => {
 
     // Get stats
     const [stats] = await db.query(
-      `SELECT 
+      `SELECT
         AVG(spo2) as avg_spo2,
         AVG(temperature) as avg_temp,
         AVG(heart_rate) as avg_hr,
         MIN(heart_rate) as min_hr,
         MAX(heart_rate) as max_hr,
         COUNT(*) as total_readings
-       FROM health_readings 
+       FROM health_readings
        WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
     );
 
@@ -2591,13 +2915,13 @@ app.get('/health/api/latest', async (req, res) => {
     );
 
     const [stats] = await db.query(
-      `SELECT 
+      `SELECT
         AVG(spo2) as avg_spo2,
         AVG(temperature) as avg_temp,
         AVG(heart_rate) as avg_hr,
         MIN(heart_rate) as min_hr,
         MAX(heart_rate) as max_hr
-       FROM health_readings 
+       FROM health_readings
        WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
     );
 

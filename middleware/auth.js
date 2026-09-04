@@ -17,5 +17,10 @@ module.exports = {
     if (req.session.cuepayUser) return next();
     req.flash('error_msg', 'Please login to CuePay');
     res.redirect('/cuepay/login');
-  }
+  },
+  isAttendXAuth: (req, res, next) => {
+    if (req.session.attendxUser) return next();
+    req.flash('error_msg', 'Please login to AttendX first');
+    res.redirect('/attendx/login');
+  },
 };
