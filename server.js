@@ -2526,6 +2526,10 @@ app.get('/spinspg/attendant', isSpinAttendant, async (req, res) => {
   }
 });
 
+// SpinSpring Landing Page
+app.get('/spinspg', (req, res) => {
+  res.render('spinspring/landing', { title: 'SpinSpring - Smart Laundry Automation' });
+});
 
 // API: Get customer active orders
 app.get('/spinspg/api/customer-orders', async (req, res) => {

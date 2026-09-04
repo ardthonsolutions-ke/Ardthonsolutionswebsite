@@ -1,0 +1,420 @@
+<%- include('../layouts/main') %>
+<style>
+:root {
+  --ss-primary: #0284c7;
+  --ss-secondary: #38bdf8;
+  --ss-accent: #0ea5e9;
+  --ss-light: #f0f9ff;
+  --ss-white: #ffffff;
+  --ss-dark: #0c4a6e;
+  --ss-bg: #f8fafc;
+}
+
+body { background: var(--ss-bg); }
+
+/* Hero Section */
+.ss-hero {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%);
+  padding: 80px 0 100px;
+  position: relative;
+  overflow: hidden;
+}
+.ss-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 500px;
+  height: 500px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 50%;
+}
+.ss-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  left: -10%;
+  width: 400px;
+  height: 400px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 50%;
+}
+.ss-hero h1 {
+  color: white;
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 15px;
+  letter-spacing: -1px;
+}
+.ss-hero .tagline {
+  color: rgba(255,255,255,0.9);
+  font-size: 1.3rem;
+  margin-bottom: 30px;
+}
+.ss-hero .hero-image {
+  border-radius: 20px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+  overflow: hidden;
+  background: white;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ss-hero .hero-image i {
+  font-size: 8rem;
+  color: var(--ss-primary);
+  opacity: 0.3;
+}
+
+/* Role Cards */
+.role-section {
+  margin-top: -50px;
+  position: relative;
+  z-index: 10;
+}
+.role-card {
+  background: white;
+  border-radius: 25px;
+  padding: 35px 25px;
+  text-align: center;
+  box-shadow: 0 15px 40px rgba(2,132,199,0.15);
+  transition: all 0.3s;
+  border: 2px solid transparent;
+  height: 100%;
+}
+.role-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 25px 60px rgba(2,132,199,0.25);
+}
+.role-card.owner { border-color: #0284c7; }
+.role-card.attendant { border-color: #10b981; }
+.role-card.customer { border-color: #f59e0b; }
+.role-card .role-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  font-size: 2.5rem;
+  color: white;
+}
+.role-card.owner .role-icon { background: linear-gradient(135deg, #0284c7, #0ea5e9); }
+.role-card.attendant .role-icon { background: linear-gradient(135deg, #10b981, #059669); }
+.role-card.customer .role-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.role-card h4 { color: var(--ss-dark); font-weight: 700; margin-bottom: 10px; }
+.role-card p { color: #64748b; font-size: 0.9rem; margin-bottom: 20px; }
+
+/* Features */
+.feature-card {
+  background: white;
+  border-radius: 20px;
+  padding: 30px;
+  text-align: center;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+  transition: all 0.3s;
+  height: 100%;
+}
+.feature-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.1); }
+.feature-card i { font-size: 3rem; color: var(--ss-primary); margin-bottom: 15px; }
+.feature-card h5 { color: var(--ss-dark); font-weight: 700; }
+
+/* Image Gallery Section */
+.gallery-section { background: white; }
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+.gallery-item {
+  position: relative;
+  border-radius: 15px;
+  overflow: hidden;
+  cursor: pointer;
+  min-height: 250px;
+  background: var(--ss-light);
+  border: 2px dashed #bae6fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gallery-item .placeholder-icon {
+  font-size: 4rem;
+  color: #bae6fd;
+}
+.gallery-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(12,74,110,0.9));
+  color: white;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.gallery-item:hover .gallery-overlay { opacity: 1; }
+
+/* Stats */
+.stat-number {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--ss-primary);
+}
+.stat-label {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+/* CTA Section */
+.cta-section {
+  background: linear-gradient(135deg, #0284c7, #0ea5e9);
+  padding: 60px 0;
+  text-align: center;
+  color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .ss-hero { padding: 60px 0 80px; }
+  .ss-hero h1 { font-size: 2.2rem; }
+  .role-section { margin-top: -30px; }
+  .role-card { margin-bottom: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Hero Section -->
+<section class="ss-hero">
+  <div class="container position-relative">
+    <div class="row align-items-center">
+      <div class="col-lg-6 mb-4 mb-lg-0">
+        <span class="badge bg-white text-primary mb-3 px-3 py-2 rounded-pill" style="color:#0284c7 !important;">
+          <i class="fas fa-star me-1"></i> Smart Laundry Automation
+        </span>
+        <h1>SpinSpring</h1>
+        <p class="tagline">Revolutionize your laundry business with IoT-powered washing machines, real-time monitoring, and smart order management.</p>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="/spinspg/login" class="btn btn-light btn-lg rounded-pill fw-bold">
+            <i class="fas fa-sign-in-alt me-2"></i> Get Started
+          </a>
+          <a href="#roles" class="btn btn-outline-light btn-lg rounded-pill">
+            <i class="fas fa-arrow-down me-2"></i> Learn More
+          </a>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="hero-image">
+          <i class="fas fa-washing-machine"></i>
+          <!-- Replace with actual image: -->
+          <!-- <img src="/images/spinspring/hero-image.jpg" alt="SpinSpring System"> -->
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Role Selection -->
+<section id="roles" class="role-section">
+  <div class="container">
+    <div class="text-center mb-4">
+      <h2 style="color:var(--ss-dark);font-weight:800;">Choose Your Portal</h2>
+      <p class="text-muted">Select the login that applies to you</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="role-card owner">
+          <div class="role-icon"><i class="fas fa-store"></i></div>
+          <h4>Owner Portal</h4>
+          <p>Manage machines, attendants, customers, and view full business analytics.</p>
+          <a href="/spinspg/login" class="btn btn-primary rounded-pill w-100" style="background:#0284c7;border:none;">
+            <i class="fas fa-sign-in-alt me-1"></i> Owner Login
+          </a>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="role-card attendant">
+          <div class="role-icon"><i class="fas fa-user-tie"></i></div>
+          <h4>Attendant Portal</h4>
+          <p>Start orders, control machines, and serve customers efficiently.</p>
+          <a href="/spinspg/attendant-login" class="btn btn-success rounded-pill w-100" style="background:#10b981;border:none;">
+            <i class="fas fa-sign-in-alt me-1"></i> Attendant Login
+          </a>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="role-card customer">
+          <div class="role-icon"><i class="fas fa-id-card"></i></div>
+          <h4>Customer Portal</h4>
+          <p>Track your orders, view history, and check loyalty points.</p>
+          <a href="/spinspg/customer-login" class="btn btn-warning rounded-pill w-100" style="background:#f59e0b;border:none;color:white;">
+            <i class="fas fa-sign-in-alt me-1"></i> Customer Login
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stats -->
+<section class="py-5 mt-5" style="background:white;">
+  <div class="container">
+    <div class="row text-center">
+      <div class="col-md-3 col-6 mb-3">
+        <div class="stat-number" data-target="1000">0</div>
+        <div class="stat-label">Machines Connected</div>
+      </div>
+      <div class="col-md-3 col-6 mb-3">
+        <div class="stat-number" data-target="50000">0</div>
+        <div class="stat-label">Cycles Completed</div>
+      </div>
+      <div class="col-md-3 col-6 mb-3">
+        <div class="stat-number" data-target="500">0</div>
+        <div class="stat-label">Businesses</div>
+      </div>
+      <div class="col-md-3 col-6 mb-3">
+        <div class="stat-number" data-target="99.9">0</div>
+        <div class="stat-label">Uptime %</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="py-5" style="background:var(--ss-bg);">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 style="color:var(--ss-dark);font-weight:800;">Key Features</h2>
+      <p class="text-muted">Everything you need to run a smart laundry business</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-3 col-6">
+        <div class="feature-card">
+          <i class="fas fa-wifi"></i>
+          <h5>IoT Connected</h5>
+          <p class="text-muted small">ESP32 with WiFi & GSM connectivity</p>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="feature-card">
+          <i class="fas fa-chart-line"></i>
+          <h5>Real-time Monitoring</h5>
+          <p class="text-muted small">Live cycle progress and machine status</p>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="feature-card">
+          <i class="fas fa-receipt"></i>
+          <h5>Order Tracking</h5>
+          <p class="text-muted small">Complete order management system</p>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="feature-card">
+          <i class="fas fa-mobile-alt"></i>
+          <h5>Multi-Role Access</h5>
+          <p class="text-muted small">Owner, attendant & customer portals</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Gallery -->
+<section class="gallery-section py-5">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 style="color:var(--ss-dark);font-weight:800;">System Gallery</h2>
+      <p class="text-muted">See SpinSpring in action</p>
+    </div>
+    <div class="gallery-grid">
+      <div class="gallery-item">
+        <i class="fas fa-washing-machine placeholder-icon"></i>
+        <div class="gallery-overlay">
+          <h6>Washing Machine Unit</h6>
+          <small>ESP32 Controller</small>
+        </div>
+        <!-- <img src="/images/spinspring/machine.jpg" alt="Machine"> -->
+      </div>
+      <div class="gallery-item">
+        <i class="fas fa-desktop placeholder-icon"></i>
+        <div class="gallery-overlay">
+          <h6>Owner Dashboard</h6>
+          <small>Full Business Control</small>
+        </div>
+        <!-- <img src="/images/spinspring/dashboard.jpg" alt="Dashboard"> -->
+      </div>
+      <div class="gallery-item">
+        <i class="fas fa-mobile-alt placeholder-icon"></i>
+        <div class="gallery-overlay">
+          <h6>Mobile Access</h6>
+          <small>Customer Portal</small>
+        </div>
+        <!-- <img src="/images/spinspring/mobile.jpg" alt="Mobile"> -->
+      </div>
+      <div class="gallery-item">
+        <i class="fas fa-lcd placeholder-icon"></i>
+        <div class="gallery-overlay">
+          <h6>LCD Display</h6>
+          <small>2004 LCD Screen</small>
+        </div>
+        <!-- <img src="/images/spinspring/lcd.jpg" alt="LCD"> -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <h2 class="fw-bold mb-3">Ready to Automate Your Laundry?</h2>
+    <p class="mb-4" style="font-size:1.2rem;">Join SpinSpring today and transform your business</p>
+    <a href="/spinspg/register" class="btn btn-light btn-lg rounded-pill fw-bold">
+      <i class="fas fa-user-plus me-2"></i> Register as Owner
+    </a>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Animated counters
+function animateCounters() {
+  document.querySelectorAll('.stat-number').forEach(counter => {
+    const target = parseFloat(counter.getAttribute('data-target'));
+    const duration = 2000;
+    const step = target / (duration / 16);
+    let current = 0;
+    const update = () => {
+      current += step;
+      if (current < target) {
+        counter.textContent = target === Math.floor(target) ? Math.floor(current) : current.toFixed(1);
+        requestAnimationFrame(update);
+      } else {
+        counter.textContent = target;
+      }
+    };
+    update();
+  });
+}
+
+// Trigger counters when visible
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      animateCounters();
+      observer.disconnect();
+    }
+  });
+});
+document.querySelectorAll('.stat-number').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
