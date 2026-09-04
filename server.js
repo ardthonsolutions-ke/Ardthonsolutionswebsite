@@ -2002,27 +2002,41 @@ app.post('/spinspg/login', async (req, res) => {
     const { email, password } = req.body;
     const bcrypt = require('bcryptjs');
     const [users] = await db.query('SELECT * FROM spinspg_users WHERE email = ? AND is_active = 1', [email]);
+    
     if (users.length === 0) {
       req.flash('error_msg', 'Invalid credentials');
       return res.redirect('/spinspg/login');
     }
+    
     const match = await bcrypt.compare(password, users[0].password);
     if (!match) {
       req.flash('error_msg', 'Invalid credentials');
       return res.redirect('/spinspg/login');
     }
+    
     req.session.spinUser = {
       id: users[0].id,
       email: users[0].email,
       name: users[0].full_name,
-      business: users[0].business_name
+      business: users[0].business_name,
+      role: users[0].role || 'owner'
     };
-    res.redirect('/spinspg/dashboard');
+    
+    // Redirect based on role
+    if (users[0].role === 'owner') {
+      res.redirect('/spinspg/owner');
+    } else if (users[0].role === 'attendant') {
+      res.redirect('/spinspg/attendant');
+    } else {
+      res.redirect('/spinspg/customer');
+    }
   } catch(err) {
+    console.error('SpinSpring login error:', err);
     req.flash('error_msg', 'Login failed');
     res.redirect('/spinspg/login');
   }
 });
+
 
 app.get('/spinspg/register', (req, res) => {
   res.render('spinspring/register', { title: 'SpinSpring Register' });
