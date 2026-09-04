@@ -3,6 +3,14 @@
 .ss-nav { background: linear-gradient(135deg, #0284c7, #0ea5e9); padding: 15px 0; }
 .ss-nav a { color: white !important; text-decoration: none; }
 .ss-nav .brand { font-size: 1.5rem; font-weight: 800; }
+.ss-nav .nav-btn {
+  padding: 8px 18px;
+  border-radius: 50px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+.ss-nav .nav-btn:hover { transform: translateY(-2px); }
 .ss-card {
   background: white;
   border-radius: 20px;
@@ -23,33 +31,86 @@
 .status-badge { padding: 5px 15px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
 .status-idle { background: #e0f2fe; color: #0284c7; }
 .status-running { background: #d1fae5; color: #065f46; }
+.status-paused { background: #fef3c7; color: #92400e; }
+.status-maintenance { background: #fee2e2; color: #991b1b; }
 .status-offline { background: #e2e8f0; color: #475569; }
 </style>
 </head>
 <body>
 <nav class="ss-nav">
-  <div class="container d-flex justify-content-between align-items-center">
-    <a href="/spinspg/dashboard" class="brand"><i class="fas fa-soap me-2"></i>SpinSpring</a>
-    <div>
-      <a href="/spinspg/register-device" class="btn btn-light btn-sm me-2 rounded-pill"><i class="fas fa-plus me-1"></i> Add Device</a>
-      <a href="/spinspg/logout" class="btn btn-outline-light btn-sm rounded-pill">Logout</a>
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <a href="/spinspg/dashboard" class="brand">
+        <i class="fas fa-soap me-2"></i>SpinSpring
+      </a>
+      <div class="d-flex flex-wrap gap-1 align-items-center">
+        <a href="/spinspg/dashboard" class="nav-btn" style="background:white;color:#0284c7 !important;">
+          <i class="fas fa-tachometer-alt me-1"></i> Dashboard
+        </a>
+        <a href="/spinspg/orders" class="nav-btn" style="border:1px solid rgba(255,255,255,0.4);">
+          <i class="fas fa-receipt me-1"></i> Orders
+        </a>
+        <a href="/spinspg/reports" class="nav-btn" style="border:1px solid rgba(255,255,255,0.4);">
+          <i class="fas fa-chart-bar me-1"></i> Reports
+        </a>
+        <a href="/spinspg/settings" class="nav-btn" style="border:1px solid rgba(255,255,255,0.4);">
+          <i class="fas fa-cog me-1"></i> Settings
+        </a>
+        <a href="/spinspg/register-device" class="nav-btn" style="background:#10b981;">
+          <i class="fas fa-plus me-1"></i> Add Machine
+        </a>
+        <a href="/spinspg/logout" class="nav-btn" style="background:#ef4444;">
+          <i class="fas fa-sign-out-alt me-1"></i> Logout
+        </a>
+      </div>
     </div>
   </div>
 </nav>
 
 <div class="container py-4">
-  <h2 class="mb-4" style="color:#0c4a6e;">Dashboard</h2>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 style="color:#0c4a6e;margin:0;">Dashboard</h2>
+    <span class="text-muted">
+      Welcome, <%= typeof user !== 'undefined' && user ? (user.name || user.email) : 'User' %>
+    </span>
+  </div>
   
   <!-- Stats -->
-  <div class="row mb-4">
-    <div class="col-md-3"><div class="ss-stat"><div class="value">Ksh <%= stats.today_rev || 0 %></div><div class="label">Today Revenue</div></div></div>
-    <div class="col-md-3"><div class="ss-stat"><div class="value">Ksh <%= stats.total_rev || 0 %></div><div class="label">Total Revenue</div></div></div>
-    <div class="col-md-3"><div class="ss-stat"><div class="value"><%= stats.today_cyc || 0 %></div><div class="label">Today Cycles</div></div></div>
-    <div class="col-md-3"><div class="ss-stat"><div class="value"><%= stats.total_cyc || 0 %></div><div class="label">Total Cycles</div></div></div>
+  <div class="row mb-4 g-3">
+    <div class="col-md-3 col-6">
+      <div class="ss-stat">
+        <div class="value">Ksh <%= stats.today_rev || 0 %></div>
+        <div class="label">Today Revenue</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="ss-stat">
+        <div class="value">Ksh <%= stats.total_rev || 0 %></div>
+        <div class="label">Total Revenue</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="ss-stat">
+        <div class="value"><%= stats.today_cyc || 0 %></div>
+        <div class="label">Today Cycles</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="ss-stat">
+        <div class="value"><%= stats.total_cyc || 0 %></div>
+        <div class="label">Total Cycles</div>
+      </div>
+    </div>
   </div>
   
   <!-- Devices -->
-  <h4 class="mb-3" style="color:#0c4a6e;">Your Machines</h4>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color:#0c4a6e;margin:0;">Your Machines</h4>
+    <a href="/spinspg/register-device" class="btn btn-sm rounded-pill" style="background:#0284c7;color:white;">
+      <i class="fas fa-plus me-1"></i> Register New Machine
+    </a>
+  </div>
+  
   <% if (typeof devices !== 'undefined' && devices.length > 0) { %>
     <div class="row g-4">
       <% devices.forEach(function(device) { %>
@@ -92,6 +153,11 @@
     </div>
   <% } %>
 </div>
+
+<!-- Refresh Indicator -->
+<div id="ss-refresh-indicator" style="text-align:right;font-size:0.75rem;color:#10b981;margin:0 20px 10px;"></div>
+
+<script src="/js/spinspring.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
