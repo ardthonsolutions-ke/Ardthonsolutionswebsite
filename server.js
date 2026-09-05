@@ -4198,6 +4198,183 @@ app.post('/api/spinspring/register-device', (req, res) => {
 // END SPINSPRING ROUTES
 // ============================================
 
+
+
+// ============================================
+// SPINSPRING ROUTES - Add before 404 handler
+// ============================================
+
+// SpinSpring main route
+app.get('/spinspring', (req, res) => {
+    res.render('spinspring/landing', { 
+        title: 'SpinSpring - Smart Laundry Automation',
+        user: null 
+    });
+});
+
+// SpinSpring Login page
+app.get('/spinspring/login', (req, res) => {
+    res.render('spinspring/login', { 
+        title: 'Login - SpinSpring',
+        error: null 
+    });
+});
+
+// SpinSpring Register page
+app.get('/spinspring/register', (req, res) => {
+    res.render('spinspring/register', { 
+        title: 'Register - SpinSpring',
+        error: null 
+    });
+});
+
+// Role-specific Logins
+app.get('/spinspring/owner-login', (req, res) => {
+    res.render('spinspring/attendant-login', { 
+        title: 'Owner Login - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/attendant-login', (req, res) => {
+    res.render('spinspring/attendant-login', { 
+        title: 'Attendant Login - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/customer-login', (req, res) => {
+    res.render('spinspring/customer-login', { 
+        title: 'Customer Login - SpinSpring',
+        error: null 
+    });
+});
+
+// SpinSpring Dashboards
+app.get('/spinspring/owner-dashboard', (req, res) => {
+    res.render('spinspring/owner-dashboard', { 
+        title: 'Owner Dashboard - SpinSpring',
+        user: { name: 'Owner', role: 'owner' }
+    });
+});
+
+app.get('/spinspring/attendant-dashboard', (req, res) => {
+    res.render('spinspring/attendant-dashboard', { 
+        title: 'Attendant Dashboard - SpinSpring',
+        user: { name: 'Attendant', role: 'attendant' }
+    });
+});
+
+app.get('/spinspring/customer-dashboard', (req, res) => {
+    res.render('spinspring/customer-dashboard', { 
+        title: 'Customer Dashboard - SpinSpring',
+        user: { name: 'Customer', role: 'customer' }
+    });
+});
+
+// SpinSpring Device Management
+app.get('/spinspring/register-device', (req, res) => {
+    res.render('spinspring/register-device', { 
+        title: 'Register Device - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/device-detail/:id', (req, res) => {
+    const deviceId = req.params.id;
+    res.render('spinspring/device-detail', { 
+        title: 'Device Detail - SpinSpring',
+        device: { 
+            id: deviceId, 
+            name: `Machine ${deviceId}`, 
+            status: 'Active' 
+        }
+    });
+});
+
+app.get('/spinspring/settings', (req, res) => {
+    res.render('spinspring/settings', { 
+        title: 'Settings - SpinSpring',
+        user: { name: 'User' }
+    });
+});
+
+// SpinSpring API Routes
+app.get('/api/spinspring/stats', (req, res) => {
+    res.json({
+        success: true,
+        stats: {
+            machines: 4,
+            cycles: 156,
+            businesses: 3,
+            uptime: '99.8%'
+        }
+    });
+});
+
+// ============================================
+// M-PESA SETTINGS ROUTES
+// ============================================
+
+app.get('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
+    try {
+        const userId = req.session.spinUser.id;
+        const [config] = await db.query('SELECT * FROM spinspg_mpesa_config WHERE owner_id = ?', [userId]);
+        res.render('spinspring/mpesa-settings', {
+            title: 'M-PESA Settings - SpinSpring',
+            config: config[0] || {},
+            user: req.session.spinUser
+        });
+    } catch(err) {
+        console.error('M-PESA settings error:', err);
+        res.render('spinspring/mpesa-settings', { 
+            title: 'M-PESA Settings', 
+            config: {}, 
+            user: req.session.spinUser 
+        });
+    }
+});
+
+app.post('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
+    try {
+        const { business_shortcode, consumer_key, consumer_secret, passkey, account_type } = req.body;
+        const userId = req.session.spinUser.id;
+        await db.query(
+            `INSERT INTO spinspg_mpesa_config (owner_id, business_shortcode, consumer_key, consumer_secret, passkey, account_type) 
+             VALUES (?, ?, ?, ?, ?, ?) 
+             ON DUPLICATE KEY UPDATE 
+             business_shortcode = ?, consumer_key = ?, consumer_secret = ?, passkey = ?, account_type = ?`,
+            [userId, business_shortcode, consumer_key, consumer_secret, passkey, account_type, 
+             business_shortcode, consumer_key, consumer_secret, passkey, account_type]
+        );
+        req.flash('success_msg', 'M-PESA settings saved!');
+        res.redirect('/spinspg/mpesa-settings');
+    } catch(err) {
+        console.error('M-PESA save error:', err);
+        req.flash('error_msg', 'Failed to save M-PESA settings');
+        res.redirect('/spinspg/mpesa-settings');
+    }
+});
+
+// Register C2B URLs
+app.post('/spinspg/mpesa/register-urls', isSpinAuth, async (req, res) => {
+    try {
+        const result = await mpesa.registerC2BUrls();
+        if (result.success) {
+            req.flash('success_msg', 'C2B URLs registered successfully!');
+        } else {
+            req.flash('error_msg', 'Failed to register C2B URLs: ' + result.error);
+        }
+    } catch(err) {
+        req.flash('error_msg', 'Error registering C2B URLs');
+    }
+    res.redirect('/spinspg/mpesa-settings');
+});
+
+// ============================================
+// END SPINSPRING ROUTES
+// ============================================
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
