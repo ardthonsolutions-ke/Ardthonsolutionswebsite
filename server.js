@@ -3749,6 +3749,151 @@ app.get('/health/api/latest', async (req, res) => {
   }
 });
 
+// ============================================
+// M-PESA DARAJA INTEGRATION (Complete)
+// ============================================
+
+const mpesa = require('./modules/mpesa');
+
+// STK Push - Initiate payment
+app.post('/spinspg/api/mpesa/stkpush', isSpinAuth, async (req, res) => {
+  try {
+    const { phone_number, amount, order_number, device_id } = req.body;
+    const ownerId = req.session.spinUser.id;
+    
+    let formattedPhone = phone_number.replace(/\D/g, '');
+    if (formattedPhone.startsWith('0')) formattedPhone = '254' + formattedPhone.substring(1);
+    if (!formattedPhone.startsWith('254')) formattedPhone = '254' + formattedPhone;
+    
+    const result = await mpesa.stkPush(formattedPhone, amount, order_number || 'SpinSpring', 'Laundry Payment');
+    
+    if (result.success) {
+      await db.query(
+        "INSERT INTO spinspg_mpesa_transactions (owner_id, device_id, order_number, checkout_request_id, merchant_request_id, phone_number, amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
+        [ownerId, device_id, order_number, result.CheckoutRequestID, result.MerchantRequestID, formattedPhone, amount]
+      );
+      res.json({ success: true, checkout_request_id: result.CheckoutRequestID, message: result.CustomerMessage || 'STK Push sent. Enter PIN.' });
+    } else {
+      res.json({ success: false, error: result.error });
+    }
+  } catch(err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// STK Push Query
+app.post('/spinspg/api/mpesa/query', isSpinAuth, async (req, res) => {
+  try {
+    const result = await mpesa.stkPushQuery(req.body.checkout_request_id);
+    res.json(result);
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// M-PESA Callback (Auto-confirm payment)
+app.post('/spinspg/api/mpesa/callback', async (req, res) => {
+  try {
+    const stkCallback = req.body.Body?.stkCallback;
+    if (stkCallback) {
+      const { CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
+      let mpesaReceiptNumber = null, amount = null, transactionDate = null;
+      
+      if (CallbackMetadata?.Item) {
+        CallbackMetadata.Item.forEach(item => {
+          if (item.Name === 'MpesaReceiptNumber') mpesaReceiptNumber = item.Value;
+          if (item.Name === 'Amount') amount = item.Value;
+          if (item.Name === 'TransactionDate') transactionDate = item.Value;
+        });
+      }
+      
+      if (ResultCode === 0) {
+        await db.query(
+          "UPDATE spinspg_mpesa_transactions SET status = 'success', mpesa_receipt_number = ?, transaction_date = ? WHERE checkout_request_id = ?",
+          [mpesaReceiptNumber, transactionDate, CheckoutRequestID]
+        );
+        const [transactions] = await db.query('SELECT * FROM spinspg_mpesa_transactions WHERE checkout_request_id = ?', [CheckoutRequestID]);
+        if (transactions.length > 0 && transactions[0].order_number) {
+          await db.query("UPDATE spinspg_orders SET payment_status = 'paid' WHERE order_number = ?", [transactions[0].order_number]);
+          if (transactions[0].device_id && amount) {
+            await db.query('UPDATE spinspg_devices SET today_revenue = today_revenue + ?, total_revenue = total_revenue + ? WHERE device_id = ?', [amount, amount, transactions[0].device_id]);
+          }
+        }
+      } else {
+        await db.query("UPDATE spinspg_mpesa_transactions SET status = 'failed' WHERE checkout_request_id = ?", [CheckoutRequestID]);
+      }
+    }
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// C2B Validation
+app.get('/spinspg/api/mpesa/callback/validation', (req, res) => {
+  res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+});
+
+// C2B Confirmation (Paybill/Till direct payment)
+app.post('/spinspg/api/mpesa/callback/confirmation', async (req, res) => {
+  try {
+    const { TransID, TransAmount, BillRefNumber, MSISDN, TransTime } = req.body;
+    await db.query(
+      "INSERT INTO spinspg_mpesa_transactions (owner_id, transaction_id, amount, phone_number, status, mpesa_receipt_number, transaction_date) VALUES (?, ?, ?, ?, 'success', ?, ?)",
+      [1, TransID, TransAmount, MSISDN, TransID, TransTime]
+    );
+    await db.query("UPDATE spinspg_orders SET payment_status = 'paid' WHERE order_number = ?", [BillRefNumber]);
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// M-PESA Settings Page
+app.get('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [config] = await db.query('SELECT * FROM spinspg_mpesa_config WHERE owner_id = ?', [userId]);
+    res.render('spinspring/mpesa-settings', {
+      title: 'M-PESA Settings - SpinSpring',
+      config: config[0] || {},
+      user: req.session.spinUser
+    });
+  } catch(err) {
+    res.render('spinspring/mpesa-settings', { title: 'M-PESA Settings', config: {}, user: req.session.spinUser });
+  }
+});
+
+// Save M-PESA Settings
+app.post('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
+  try {
+    const { business_shortcode, consumer_key, consumer_secret, passkey, account_type } = req.body;
+    const userId = req.session.spinUser.id;
+    await db.query(
+      "INSERT INTO spinspg_mpesa_config (owner_id, business_shortcode, consumer_key, consumer_secret, passkey, account_type) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE business_shortcode = ?, consumer_key = ?, consumer_secret = ?, passkey = ?, account_type = ?",
+      [userId, business_shortcode, consumer_key, consumer_secret, passkey, account_type, business_shortcode, consumer_key, consumer_secret, passkey, account_type]
+    );
+    req.flash('success_msg', 'M-PESA settings saved!');
+    res.redirect('/spinspg/mpesa-settings');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to save');
+    res.redirect('/spinspg/mpesa-settings');
+  }
+});
+
+// Register C2B URLs
+app.post('/spinspg/mpesa/register-urls', isSpinAuth, async (req, res) => {
+  const result = await mpesa.registerC2BUrls();
+  if (result.success) req.flash('success_msg', 'C2B URLs registered!');
+  else req.flash('error_msg', 'Failed: ' + result.error);
+  res.redirect('/spinspg/mpesa-settings');
+});
+
+// ============================================
+// END M-PESA DARAJA INTEGRATION
+// ============================================
+
+
 // 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
