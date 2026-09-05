@@ -323,6 +323,343 @@ app.get('/attendx/register-device', isAttendXAuth, (req, res) => {
   res.render('attendx/register-device', { title: 'Register AttendX Device' });
 });
 
+
+// ============================================
+// SPINSPRING PAYMENT INTEGRATION
+// ============================================
+
+// M-PESA Payment Webhook (SIM800L sends SMS → ESP32 parses → forwards to server)
+app.post('/spinspg/api/payment', validateSpinApiKey, async (req, res) => {
+  try {
+    const device = req.spinDevice;
+    const { transaction_id, amount, customer_number, order_number } = req.body;
+    
+    // Save payment
+    await db.query(
+      'INSERT INTO spinspg_payments (device_id, order_number, transaction_id, amount, customer_number) VALUES (?, ?, ?, ?, ?)',
+      [device.device_id, order_number, transaction_id, amount, customer_number]
+    );
+    
+    // Update device revenue
+    await db.query(
+      'UPDATE spinspg_devices SET today_revenue = today_revenue + ?, total_revenue = total_revenue + ? WHERE device_id = ?',
+      [amount, amount, device.device_id]
+    );
+    
+    // Update order payment status
+    if (order_number) {
+      await db.query(
+        "UPDATE spinspg_orders SET payment_status = 'paid', order_status = 'in_progress', start_time = NOW() WHERE order_number = ?",
+        [order_number]
+      );
+    }
+    
+    res.json({ success: true, message: 'Payment recorded' });
+  } catch(err) {
+    res.status(500).json({ error: 'Payment processing failed' });
+  }
+});
+
+// Get payments for a device
+app.get('/spinspg/api/payments/:deviceId', isSpinAuth, async (req, res) => {
+  const [payments] = await db.query(
+    'SELECT * FROM spinspg_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
+    [req.params.deviceId]
+  );
+  res.json({ success: true, payments });
+});
+
+// ============================================
+// ORDER LIFECYCLE MANAGEMENT
+// ============================================
+
+// Update order status
+app.post('/spinspg/order/:orderId/status', isSpinAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const orderId = req.params.orderId;
+    
+    if (status === 'in_progress') {
+      await db.query(
+        "UPDATE spinspg_orders SET order_status = 'in_progress', start_time = NOW() WHERE id = ?",
+        [orderId]
+      );
+    } else if (status === 'completed') {
+      await db.query(
+        "UPDATE spinspg_orders SET order_status = 'completed', end_time = NOW() WHERE id = ?",
+        [orderId]
+      );
+      
+      // Get order details for notification
+      const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE id = ?', [orderId]);
+      if (orders.length > 0) {
+        const order = orders[0];
+        
+        // Send email notification if customer has email
+        const [customers] = await db.query(
+          'SELECT * FROM spinspg_customers WHERE customer_unique_id = ?',
+          [order.customer_name]
+        );
+        
+        if (customers.length > 0 && customers[0].email) {
+          await sendEmail(
+            customers[0].email,
+            'Your laundry is ready!',
+            'Your order ' + order.order_number + ' is complete. Please collect your laundry.\n\nService: ' + order.service_type + '\nPrice: Ksh ' + order.price + '\n\nThank you for using SpinSpring!'
+          );
+        }
+      }
+    } else if (status === 'cancelled') {
+      await db.query(
+        "UPDATE spinspg_orders SET order_status = 'cancelled' WHERE id = ?",
+        [orderId]
+      );
+    }
+    
+    req.flash('success_msg', 'Order status updated to ' + status);
+    res.redirect('/spinspg/orders');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update order');
+    res.redirect('/spinspg/orders');
+  }
+});
+
+// Auto-update order status based on device cycle progress
+setInterval(async () => {
+  try {
+    // Update in_progress orders to completed if device is idle
+    await db.query(`
+      UPDATE spinspg_orders o
+      JOIN spinspg_devices d ON o.device_id = d.device_id
+      SET o.order_status = 'completed', o.end_time = NOW()
+      WHERE o.order_status = 'in_progress' AND d.status = 'idle'
+    `);
+  } catch(err) {}
+}, 60000); // Check every minute
+
+
+// ============================================
+// EMAIL NOTIFICATIONS
+// ============================================
+
+// Notification settings for SpinSpring
+app.get('/spinspg/settings/notifications', isSpinAuth, async (req, res) => {
+  const userId = req.session.spinUser.id;
+  const [settings] = await db.query(
+    'SELECT * FROM spinspg_notification_settings WHERE user_id = ?',
+    [userId]
+  );
+  res.json({ success: true, settings: settings[0] || {} });
+});
+
+app.post('/spinspg/settings/notifications', isSpinAuth, async (req, res) => {
+  const userId = req.session.spinUser.id;
+  const { emailAlerts, lowRevenue, maintenance } = req.body;
+  
+  await db.query(`
+    INSERT INTO spinspg_notification_settings (user_id, email_alerts, low_revenue, maintenance)
+    VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE email_alerts = ?, low_revenue = ?, maintenance = ?
+  `, [userId, emailAlerts, lowRevenue, maintenance, emailAlerts, lowRevenue, maintenance]);
+  
+  res.json({ success: true });
+});
+
+// Cycle completion alert
+setInterval(async () => {
+  try {
+    const [completedOrders] = await db.query(`
+      SELECT o.*, c.email as customer_email, c.full_name as customer_name
+      FROM spinspg_orders o
+      LEFT JOIN spinspg_customers c ON o.customer_name = c.customer_unique_id
+      WHERE o.order_status = 'completed' 
+        AND o.end_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        AND c.email IS NOT NULL
+    `);
+    
+    for (const order of completedOrders) {
+      await sendEmail(
+        order.customer_email,
+        'Your laundry is ready for pickup!',
+        'Hello ' + (order.customer_name || 'Customer') + ',\n\nYour order ' + order.order_number + ' is complete.\n\nService: ' + order.service_type.replace('_', ' → ') + '\nCycle: ' + order.cycle_type + '\nPrice: Ksh ' + order.price + '\n\nPlease collect your laundry. Thank you for using SpinSpring!'
+      );
+    }
+  } catch(err) {}
+}, 300000); // Check every 5 minutes
+
+// Low revenue alert
+setInterval(async () => {
+  try {
+    const [lowRevenue] = await db.query(`
+      SELECT d.*, u.email
+      FROM spinspg_devices d
+      LEFT JOIN spinspg_users u ON d.owner_id = u.id
+      WHERE d.today_revenue < 500 AND d.status = 'online'
+        AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    `);
+    
+    for (const device of lowRevenue) {
+      if (device.email && isBusinessHours()) {
+        await sendEmail(
+          device.email,
+          'Low revenue alert for ' + device.device_name,
+          device.device_name + ' has only made Ksh ' + device.today_revenue + ' today.\n\nCheck your machine: https://ardthonsolutions.com/spinspg/device/' + device.device_id
+        );
+      }
+    }
+  } catch(err) {}
+}, 3600000); // Check every hour
+
+
+// ============================================
+// SETTINGS ROUTES
+// ============================================
+
+// Business info update
+app.post('/spinspg/settings/business', isSpinAuth, async (req, res) => {
+  try {
+    const { business_name, phone } = req.body;
+    const userId = req.session.spinUser.id;
+    
+    await db.query(
+      'UPDATE spinspg_users SET business_name = ?, phone = ? WHERE id = ?',
+      [business_name, phone, userId]
+    );
+    
+    req.session.spinUser.business = business_name;
+    req.flash('success_msg', 'Business info updated!');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update business info');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+// Password change
+app.post('/spinspg/settings/password', isSpinAuth, async (req, res) => {
+  try {
+    const { current_password, new_password, confirm_password } = req.body;
+    const bcrypt = require('bcryptjs');
+    const userId = req.session.spinUser.id;
+    
+    if (new_password !== confirm_password) {
+      req.flash('error_msg', 'New passwords do not match');
+      return res.redirect('/spinspg/settings');
+    }
+    
+    const [users] = await db.query('SELECT password FROM spinspg_users WHERE id = ?', [userId]);
+    const match = await bcrypt.compare(current_password, users[0].password);
+    
+    if (!match) {
+      req.flash('error_msg', 'Current password is incorrect');
+      return res.redirect('/spinspg/settings');
+    }
+    
+    const hash = await bcrypt.hash(new_password, 10);
+    await db.query('UPDATE spinspg_users SET password = ? WHERE id = ?', [hash, userId]);
+    
+    req.flash('success_msg', 'Password changed successfully!');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to change password');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+// Default machine settings
+app.post('/spinspg/settings/defaults', isSpinAuth, async (req, res) => {
+  try {
+    const { default_price, default_cycle } = req.body;
+    const userId = req.session.spinUser.id;
+    
+    // Update all devices for this owner
+    await db.query(
+      'UPDATE spinspg_devices SET price_per_cycle = ? WHERE owner_id = ?',
+      [default_price, userId]
+    );
+    
+    req.flash('success_msg', 'Default settings updated!');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update defaults');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+// ============================================
+// REPORTS ENHANCEMENT
+// ============================================
+
+// Export CSV
+app.get('/spinspg/export/orders', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [orders] = await db.query(
+      'SELECT order_number, customer_name, service_type, cycle_type, price, payment_status, order_status, created_at FROM spinspg_orders WHERE user_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+    
+    let csv = 'Order Number,Customer,Service,Cycle,Price,Payment,Status,Date\n';
+    orders.forEach(o => {
+      csv += `${o.order_number},${o.customer_name},${o.service_type},${o.cycle_type},${o.price},${o.payment_status},${o.order_status},${o.created_at}\n`;
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=spinspring_orders_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch(err) {
+    res.redirect('/spinspg/reports');
+  }
+});
+
+// Export revenue CSV
+app.get('/spinspg/export/revenue', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query(
+      'SELECT device_name, device_type, cycles_completed, today_revenue, total_revenue FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    
+    let csv = 'Machine,Type,Total Cycles,Today Revenue,Total Revenue\n';
+    devices.forEach(d => {
+      csv += `${d.device_name},${d.device_type},${d.cycles_completed},${d.today_revenue},${d.total_revenue}\n`;
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=spinspring_revenue_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch(err) {
+    res.redirect('/spinspg/reports');
+  }
+});
+
+// API for charts
+app.get('/spinspg/api/chart-data', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    
+    // Daily revenue for last 7 days
+    const [daily] = await db.query(`
+      SELECT DATE(created_at) as date, SUM(price) as revenue, COUNT(*) as orders
+      FROM spinspg_orders
+      WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `, [userId]);
+    
+    // Hourly distribution
+    const [hourly] = await db.query(`
+      SELECT HOUR(created_at) as hour, COUNT(*) as orders
+      FROM spinspg_orders
+      WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      GROUP BY HOUR(created_at)
+      ORDER BY hour
+    `, [userId]);
+    
+    res.json({ success: true, daily, hourly });
+  } catch(err) {
+    res.json({ success: false });
+  }
+});
+
 // Register device handler
 app.post('/attendx/register-device', isAttendXAuth, async (req, res) => {
   try {
