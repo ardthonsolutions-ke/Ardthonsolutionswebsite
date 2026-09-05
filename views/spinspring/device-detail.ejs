@@ -9,6 +9,13 @@
 .status-paused { background: #fef3c7; color: #92400e; }
 .status-maintenance { background: #fee2e2; color: #991b1b; }
 .status-offline { background: #e2e8f0; color: #475569; }
+.weight-info-box {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 15px;
+  margin-top: 15px;
+}
 </style>
 </head>
 <body>
@@ -33,6 +40,42 @@
     <div class="col-md-3"><div class="ss-card text-center"><div class="h3 fw-bold text-success">Ksh <%= device.today_revenue %></div><small class="text-muted">Today Revenue</small></div></div>
   </div>
 
+  <!-- Weight Pricing Settings -->
+  <div class="ss-card">
+    <h5 class="mb-3" style="color:#0c4a6e;">
+      <i class="fas fa-weight me-2"></i>Weight Pricing Settings
+    </h5>
+    <form action="/spinspg/device/<%= device.device_id %>/weight-settings" method="POST">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Price per Kg (Ksh)</label>
+          <input type="number" name="price_per_kg" class="form-control" value="<%= device.price_per_kg || 50 %>" step="0.01" min="1" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Max Capacity (kg)</label>
+          <input type="number" name="max_capacity_kg" class="form-control" value="<%= device.max_capacity_kg || 20 %>" step="0.5" min="1" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Min Load (kg)</label>
+          <input type="number" name="min_capacity_kg" class="form-control" value="<%= device.min_capacity_kg || 1 %>" step="0.5" min="0.5" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary rounded-pill mt-3" style="background:#0284c7;border:none;">
+        <i class="fas fa-save me-2"></i> Save Weight Settings
+      </button>
+    </form>
+
+    <div class="weight-info-box">
+      <small class="text-muted">Current Pricing:</small>
+      <p class="mb-0 fw-bold" style="font-size:1.2rem;">
+        Ksh <%= device.price_per_kg || 50 %>/kg × Weight = Total Price
+      </p>
+      <small class="text-muted">
+        Machine accepts <%= device.min_capacity_kg || 1 %>kg - <%= device.max_capacity_kg || 20 %>kg
+      </small>
+    </div>
+  </div>
+
   <div class="row g-4">
     <div class="col-lg-5">
       <div class="ss-card">
@@ -45,14 +88,13 @@
               <option value="stop">Stop Machine</option>
               <option value="pause">Pause</option>
               <option value="resume">Resume</option>
-              <option value="change_price">Change Price</option>
               <option value="lock_door">Lock Door</option>
               <option value="unlock_door">Unlock Door</option>
             </select>
           </div>
           <div class="mb-3">
             <label class="form-label">Value</label>
-            <input type="text" name="command_value" class="form-control" placeholder="e.g., normal for cycle, 350 for price">
+            <input type="text" name="command_value" class="form-control" placeholder="e.g., normal for cycle">
           </div>
           <button type="submit" class="btn btn-primary w-100 rounded-pill" style="background:#0284c7;border:none;">
             <i class="fas fa-paper-plane me-2"></i> Send Command
@@ -64,19 +106,22 @@
       <div class="ss-card">
         <h5 class="mb-3" style="color:#0c4a6e;">Recent Orders</h5>
         <% if (typeof orders !== 'undefined' && orders.length > 0) { %>
-          <table class="table">
-            <thead><tr><th>Order #</th><th>Service</th><th>Status</th><th>Price</th></tr></thead>
-            <tbody>
-              <% orders.forEach(function(o) { %>
-                <tr>
-                  <td style="font-size:0.8rem;"><%= o.order_number %></td>
-                  <td><%= o.service_type %></td>
-                  <td><span class="badge bg-info"><%= o.order_status %></span></td>
-                  <td>Ksh <%= o.price %></td>
-                </tr>
-              <% }) %>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="table">
+              <thead><tr><th>Order #</th><th>Weight</th><th>Service</th><th>Status</th><th>Price</th></tr></thead>
+              <tbody>
+                <% orders.forEach(function(o) { %>
+                  <tr>
+                    <td style="font-size:0.8rem;"><%= o.order_number %></td>
+                    <td><%= o.weight_kg ? o.weight_kg + 'kg' : 'N/A' %></td>
+                    <td><%= o.service_type %></td>
+                    <td><span class="badge bg-info"><%= o.order_status %></span></td>
+                    <td>Ksh <%= o.price %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
         <% } else { %>
           <p class="text-muted">No orders yet</p>
         <% } %>

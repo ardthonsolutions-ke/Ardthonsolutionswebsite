@@ -660,6 +660,109 @@ app.get('/spinspg/api/chart-data', isSpinAuth, async (req, res) => {
   }
 });
 
+// ============================================
+// WEIGHT-BASED PRICING SYSTEM
+// ============================================
+
+// Helper: Calculate price from weight
+function calculateWeightPrice(weightKg, pricePerKg) {
+  if (!weightKg || !pricePerKg) return 0;
+  return parseFloat((weightKg * pricePerKg).toFixed(2));
+}
+
+// Owner: Update machine weight settings
+app.post('/spinspg/device/:deviceId/weight-settings', isSpinAuth, async (req, res) => {
+  try {
+    const { price_per_kg, max_capacity_kg, min_capacity_kg } = req.body;
+    const userId = req.session.spinUser.id;
+    
+    await db.query(
+      'UPDATE spinspg_devices SET price_per_kg = ?, max_capacity_kg = ?, min_capacity_kg = ? WHERE device_id = ? AND owner_id = ?',
+      [price_per_kg, max_capacity_kg, min_capacity_kg || 1, req.params.deviceId, userId]
+    );
+    
+    req.flash('success_msg', 'Weight settings updated!');
+    res.redirect(`/spinspg/device/${req.params.deviceId}`);
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update weight settings');
+    res.redirect(`/spinspg/device/${req.params.deviceId}`);
+  }
+});
+
+// Attendant: Create weight-based order
+app.post('/spinspg/attendant/orders', isSpinAttendant, async (req, res) => {
+  try {
+    const { device_id, customer_id, service_type, cycle_type, weight_kg, payment_status } = req.body;
+    const ownerId = req.session.spinUser.ownerId;
+    const orderNumber = 'SS-' + Date.now().toString(36).toUpperCase();
+    
+    // Get machine's price per kg
+    const [devices] = await db.query(
+      'SELECT price_per_kg, max_capacity_kg, min_capacity_kg FROM spinspg_devices WHERE device_id = ?',
+      [device_id]
+    );
+    
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Machine not found');
+      return res.redirect('/spinspg/attendant');
+    }
+    
+    const machine = devices[0];
+    const weight = parseFloat(weight_kg);
+    
+    // Validate weight against machine capacity
+    if (weight > parseFloat(machine.max_capacity_kg)) {
+      req.flash('error_msg', `Weight exceeds machine capacity! Max: ${machine.max_capacity_kg}kg`);
+      return res.redirect('/spinspg/attendant');
+    }
+    
+    if (weight < parseFloat(machine.min_capacity_kg || 1)) {
+      req.flash('error_msg', `Weight below minimum! Min: ${machine.min_capacity_kg || 1}kg`);
+      return res.redirect('/spinspg/attendant');
+    }
+    
+    // Calculate price
+    const totalPrice = calculateWeightPrice(weight, parseFloat(machine.price_per_kg));
+    
+    await db.query(
+      `INSERT INTO spinspg_orders (order_number, device_id, user_id, customer_name, service_type, cycle_type, price, weight_kg, price_per_kg, total_weight_price, payment_status, order_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
+      [orderNumber, device_id, ownerId, customer_id, service_type, cycle_type, totalPrice, weight, machine.price_per_kg, totalPrice, payment_status]
+    );
+    
+    // Update customer stats
+    if (customer_id !== 'walk-in') {
+      await db.query(
+        'UPDATE spinspg_customers SET total_cycles = total_cycles + 1, total_spent = total_spent + ?, loyalty_points = loyalty_points + FLOOR(?/100) WHERE customer_unique_id = ?',
+        [totalPrice, totalPrice, customer_id]
+      );
+    }
+    
+    req.flash('success_msg', `Order ${orderNumber} created! ${weight}kg × Ksh ${machine.price_per_kg}/kg = Ksh ${totalPrice}`);
+    res.redirect('/spinspg/attendant');
+  } catch(err) {
+    console.error('Order error:', err);
+    req.flash('error_msg', 'Failed to create order');
+    res.redirect('/spinspg/attendant');
+  }
+});
+
+// API: Get machine weight settings for real-time calculation
+app.get('/spinspg/api/machine/:deviceId/weight', isSpinAuth, async (req, res) => {
+  try {
+    const [devices] = await db.query(
+      'SELECT price_per_kg, max_capacity_kg, min_capacity_kg FROM spinspg_devices WHERE device_id = ?',
+      [req.params.deviceId]
+    );
+    if (devices.length === 0) {
+      return res.json({ success: false, error: 'Machine not found' });
+    }
+    res.json({ success: true, machine: devices[0] });
+  } catch(err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
 // Register device handler
 app.post('/attendx/register-device', isAttendXAuth, async (req, res) => {
   try {
