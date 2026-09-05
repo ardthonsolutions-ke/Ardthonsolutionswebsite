@@ -6,6 +6,12 @@ const path = require('path');
 const app = express();
 const crypto = require('crypto');
 
+// Add this near the top with your other imports
+const spinspringRoutes = require('./routes/spinspring');
+
+// Add this after your other app.use statements
+app.use('/spinspring', spinspringRoutes);
+
 // Database connection
 const mysql = require('mysql2/promise');
 const db = mysql.createPool({
@@ -3893,6 +3899,142 @@ app.post('/spinspg/mpesa/register-urls', isSpinAuth, async (req, res) => {
 // END M-PESA DARAJA INTEGRATION
 // ============================================
 
+
+// ============================================
+// SPINSPRING ROUTES - Add these to your server.js
+// ============================================
+
+// SpinSpring Landing Page
+app.get('/spinspring', (req, res) => {
+    res.render('spinspring/landing', { 
+        title: 'SpinSpring - Smart Laundry Automation',
+        user: null 
+    });
+});
+
+// SpinSpring Login Pages
+app.get('/spinspring/login', (req, res) => {
+    res.render('spinspring/login', { 
+        title: 'Login - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/register', (req, res) => {
+    res.render('spinspring/register', { 
+        title: 'Register - SpinSpring',
+        error: null 
+    });
+});
+
+// Role-specific Logins
+app.get('/spinspring/owner-login', (req, res) => {
+    res.render('spinspring/owner-login', { 
+        title: 'Owner Login - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/attendant-login', (req, res) => {
+    res.render('spinspring/attendant-login', { 
+        title: 'Attendant Login - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/customer-login', (req, res) => {
+    res.render('spinspring/customer-login', { 
+        title: 'Customer Login - SpinSpring',
+        error: null 
+    });
+});
+
+// SpinSpring Dashboards
+app.get('/spinspring/owner-dashboard', (req, res) => {
+    res.render('spinspring/owner-dashboard', { 
+        title: 'Owner Dashboard - SpinSpring',
+        user: { name: 'Owner', role: 'owner' }
+    });
+});
+
+app.get('/spinspring/attendant-dashboard', (req, res) => {
+    res.render('spinspring/attendant-dashboard', { 
+        title: 'Attendant Dashboard - SpinSpring',
+        user: { name: 'Attendant', role: 'attendant' }
+    });
+});
+
+app.get('/spinspring/customer-dashboard', (req, res) => {
+    res.render('spinspring/customer-dashboard', { 
+        title: 'Customer Dashboard - SpinSpring',
+        user: { name: 'Customer', role: 'customer' }
+    });
+});
+
+// SpinSpring Device Management
+app.get('/spinspring/register-device', (req, res) => {
+    res.render('spinspring/register-device', { 
+        title: 'Register Device - SpinSpring',
+        error: null 
+    });
+});
+
+app.get('/spinspring/device-detail/:id', (req, res) => {
+    const deviceId = req.params.id;
+    res.render('spinspring/device-detail', { 
+        title: 'Device Detail - SpinSpring',
+        device: { 
+            id: deviceId, 
+            name: `Machine ${deviceId}`, 
+            status: 'Active' 
+        }
+    });
+});
+
+app.get('/spinspring/settings', (req, res) => {
+    res.render('spinspring/settings', { 
+        title: 'Settings - SpinSpring',
+        user: { name: 'User' }
+    });
+});
+
+// SpinSpring API Routes
+app.get('/api/spinspring/machines', (req, res) => {
+    res.json({ 
+        success: true,
+        machines: [
+            { id: 1, name: 'Machine 1', status: 'active', location: 'Laundry A' },
+            { id: 2, name: 'Machine 2', status: 'idle', location: 'Laundry B' },
+            { id: 3, name: 'Machine 3', status: 'active', location: 'Laundry A' },
+            { id: 4, name: 'Machine 4', status: 'maintenance', location: 'Laundry C' }
+        ]
+    });
+});
+
+app.get('/api/spinspring/stats', (req, res) => {
+    res.json({
+        success: true,
+        stats: {
+            machines: 4,
+            cycles: 156,
+            businesses: 3,
+            uptime: '99.8%'
+        }
+    });
+});
+
+app.post('/api/spinspring/register-device', (req, res) => {
+    // Device registration logic
+    res.json({ 
+        success: true, 
+        message: 'Device registered successfully',
+        device: req.body 
+    });
+});
+
+// ============================================
+// END SPINSPRING ROUTES
+// ============================================
 
 // 404
 app.use((req, res) => {
