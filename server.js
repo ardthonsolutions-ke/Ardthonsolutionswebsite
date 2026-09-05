@@ -6,13 +6,9 @@ const path = require('path');
 const app = express();
 const crypto = require('crypto');
 
-// Add this near the top with your other imports
-const spinspringRoutes = require('./routes/spinspring');
-
-// Add this after your other app.use statements
-app.use('/spinspring', spinspringRoutes);
-
-// Database connection
+// ============================================
+// DATABASE CONNECTION
+// ============================================
 const mysql = require('mysql2/promise');
 const db = mysql.createPool({
   host: process.env.DB_HOST || '127.0.0.1',
@@ -26,31 +22,22 @@ const db = mysql.createPool({
   charset: 'utf8mb4'
 });
 
-// Test DB
 db.getConnection()
   .then(conn => { console.log('MySQL Connected'); conn.release(); })
   .catch(err => console.error('MySQL Error:', err.message));
 
-
 // ============================================
-// EMAIL CONFIGURATION - Using cPanel's FREE built-in email
+// EMAIL CONFIGURATION
 // ============================================
 const nodemailer = require('nodemailer');
 
-
-
-// Create email transporter using localhost
 const emailTransporter = nodemailer.createTransport({
   host: 'localhost',
   port: 25,
   secure: false,
-  tls: {
-    rejectUnauthorized: false
-  }
+  tls: { rejectUnauthorized: false }
 });
 
-
-// Send email function
 async function sendEmail(to, subject, html) {
   try {
     const info = await emailTransporter.sendMail({
@@ -68,28 +55,21 @@ async function sendEmail(to, subject, html) {
   }
 }
 
-// Check if current time is within business hours
 function isBusinessHours() {
   const now = new Date();
   const hour = now.getHours();
-  const day = now.getDay(); // 0=Sunday, 6=Saturday
-
-  // Business hours: Mon-Sat 8AM-10PM, Sun 10AM-8PM
-  if (day === 0) { // Sunday
-    return hour >= 10 && hour < 20;
-  } else if (day === 6) { // Saturday
-    return hour >= 8 && hour < 22;
-  } else { // Monday-Friday
-    return hour >= 8 && hour < 22;
-  }
+  const day = now.getDay();
+  if (day === 0) return hour >= 10 && hour < 20;
+  else if (day === 6) return hour >= 8 && hour < 22;
+  else return hour >= 8 && hour < 22;
 }
 
-
-// View engine
+// ============================================
+// VIEW ENGINE & MIDDLEWARE
+// ============================================
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Middleware
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -101,13 +81,11 @@ app.use(session({
 }));
 app.use(flash());
 
-// Database middleware
 app.use((req, res, next) => {
   req.db = db;
   next();
 });
 
-// Global variables
 app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
   res.locals.success_msg = req.flash('success_msg') || [];
@@ -120,10 +98,99 @@ app.use((req, res, next) => {
 });
 
 // ============================================
-// ROUTES
+// SPINSPRING EJS RENDERING ROUTES
 // ============================================
 
-// Homepage
+app.get('/spinspring', (req, res) => {
+    res.render('spinspring/landing', { title: 'SpinSpring - Smart Laundry Automation', user: null });
+});
+
+app.get('/spinspring/login', (req, res) => {
+    res.render('spinspring/login', { title: 'Login - SpinSpring', error: null });
+});
+
+app.get('/spinspring/register', (req, res) => {
+    res.render('spinspring/register', { title: 'Register - SpinSpring', error: null });
+});
+
+app.get('/spinspring/owner-login', (req, res) => {
+    res.render('spinspring/attendant-login', { title: 'Owner Login - SpinSpring', error: null });
+});
+
+app.get('/spinspring/attendant-login', (req, res) => {
+    res.render('spinspring/attendant-login', { title: 'Attendant Login - SpinSpring', error: null });
+});
+
+app.get('/spinspring/customer-login', (req, res) => {
+    res.render('spinspring/customer-login', { title: 'Customer Login - SpinSpring', error: null });
+});
+
+app.get('/spinspring/owner-dashboard', (req, res) => {
+    res.render('spinspring/owner-dashboard', { title: 'Owner Dashboard - SpinSpring', user: { name: 'Owner', role: 'owner' } });
+});
+
+app.get('/spinspring/attendant-dashboard', (req, res) => {
+    res.render('spinspring/attendant-dashboard', { title: 'Attendant Dashboard - SpinSpring', user: { name: 'Attendant', role: 'attendant' } });
+});
+
+app.get('/spinspring/customer-dashboard', (req, res) => {
+    res.render('spinspring/customer-dashboard', { title: 'Customer Dashboard - SpinSpring', user: { name: 'Customer', role: 'customer' } });
+});
+
+app.get('/spinspring/register-device', (req, res) => {
+    res.render('spinspring/register-device', { title: 'Register Device - SpinSpring', error: null });
+});
+
+app.get('/spinspring/device-detail/:id', (req, res) => {
+    const deviceId = req.params.id;
+    res.render('spinspring/device-detail', { title: 'Device Detail - SpinSpring', device: { id: deviceId, name: 'Machine ${deviceId}', status: 'Active' } });
+});
+
+app.get('/spinspring/settings', (req, res) => {
+    res.render('spinspring/settings', { title: 'Settings - SpinSpring', user: { name: 'User' } });
+});
+
+app.get('/api/spinspring/machines', (req, res) => {
+    res.json({ success: true, machines: [
+        { id: 1, name: 'Machine 1', status: 'active', location: 'Laundry A' },
+        { id: 2, name: 'Machine 2', status: 'idle', location: 'Laundry B' },
+        { id: 3, name: 'Machine 3', status: 'active', location: 'Laundry A' },
+        { id: 4, name: 'Machine 4', status: 'maintenance', location: 'Laundry C' }
+    ]});
+});
+
+app.get('/api/spinspring/stats', (req, res) => {
+    res.json({ success: true, stats: { machines: 4, cycles: 156, businesses: 3, uptime: '99.8%' } });
+});
+
+app.post('/api/spinspring/register-device', (req, res) => {
+    res.json({ success: true, message: 'Device registered successfully', device: req.body });
+});
+
+// ============================================
+// SUBDOMAIN DETECTION
+// ============================================
+
+app.use((req, res, next) => {
+    const host = req.get('host');
+    if (host && host.includes('spinspring.ardthonsolutions.com')) {
+        req.isSpinSpring = true;
+    }
+    next();
+});
+
+app.get('/', (req, res, next) => {
+    if (req.isSpinSpring) {
+        res.render('spinspring/landing', { title: 'SpinSpring - Smart Laundry Automation', user: null });
+    } else {
+        next();
+    }
+});
+
+// ============================================
+// ROUTES - HOMEPAGE
+// ============================================
+
 app.get('/', async (req, res) => {
   try {
     let featuredProducts = [];
@@ -171,34 +238,25 @@ app.get('/', async (req, res) => {
   }
 });
 
-
-
 // ============================================
 // ATTENDX - SCHOOL GATE ATTENDANCE SYSTEM
 // ============================================
 
-
-// Generate unique API key
 function generateAttendXApiKey() {
   return 'AX-' + crypto.randomBytes(16).toString('hex');
 }
 
-// AttendX middleware
 function isAttendXAuth(req, res, next) {
   if (req.session.attendxUser) return next();
   req.flash('error_msg', 'Please login to AttendX first');
   res.redirect('/attendx/login');
 }
 
-// ===== ATTENDX WEB PAGES =====
-
-// Login page
 app.get('/attendx/login', (req, res) => {
   if (req.session.attendxUser) return res.redirect('/attendx/dashboard');
   res.render('attendx/login', { title: 'AttendX Login - Ardthon Solutions' });
 });
 
-// Login handler
 app.post('/attendx/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -235,12 +293,10 @@ app.post('/attendx/login', async (req, res) => {
   }
 });
 
-// Register page
 app.get('/attendx/register', (req, res) => {
   res.render('attendx/register', { title: 'Register AttendX - Ardthon Solutions' });
 });
 
-// Register handler
 app.post('/attendx/register', async (req, res) => {
   try {
     const { email, password, password2, full_name, institution_name, institution_type, phone } = req.body;
@@ -272,13 +328,11 @@ app.post('/attendx/register', async (req, res) => {
   }
 });
 
-// Logout
 app.get('/attendx/logout', (req, res) => {
   delete req.session.attendxUser;
   res.redirect('/attendx/login');
 });
 
-// Dashboard
 app.get('/attendx/dashboard', isAttendXAuth, async (req, res) => {
   try {
     const userId = req.session.attendxUser.id;
@@ -288,7 +342,6 @@ app.get('/attendx/dashboard', isAttendXAuth, async (req, res) => {
       [userId]
     );
 
-    // Get stats for each device
     for (let device of devices) {
       const [todayEntries] = await db.query(
         "SELECT COUNT(*) as count FROM attendx_records WHERE device_id = ? AND event_type = 'entry' AND DATE(recorded_at) = CURDATE()",
@@ -324,452 +377,10 @@ app.get('/attendx/dashboard', isAttendXAuth, async (req, res) => {
   }
 });
 
-// Register device page
 app.get('/attendx/register-device', isAttendXAuth, (req, res) => {
   res.render('attendx/register-device', { title: 'Register AttendX Device' });
 });
 
-
-// ============================================
-// SPINSPRING PAYMENT INTEGRATION
-// ============================================
-
-// M-PESA Payment Webhook (SIM800L sends SMS → ESP32 parses → forwards to server)
-app.post('/spinspg/api/payment', validateSpinApiKey, async (req, res) => {
-  try {
-    const device = req.spinDevice;
-    const { transaction_id, amount, customer_number, order_number } = req.body;
-    
-    // Save payment
-    await db.query(
-      'INSERT INTO spinspg_payments (device_id, order_number, transaction_id, amount, customer_number) VALUES (?, ?, ?, ?, ?)',
-      [device.device_id, order_number, transaction_id, amount, customer_number]
-    );
-    
-    // Update device revenue
-    await db.query(
-      'UPDATE spinspg_devices SET today_revenue = today_revenue + ?, total_revenue = total_revenue + ? WHERE device_id = ?',
-      [amount, amount, device.device_id]
-    );
-    
-    // Update order payment status
-    if (order_number) {
-      await db.query(
-        "UPDATE spinspg_orders SET payment_status = 'paid', order_status = 'in_progress', start_time = NOW() WHERE order_number = ?",
-        [order_number]
-      );
-    }
-    
-    res.json({ success: true, message: 'Payment recorded' });
-  } catch(err) {
-    res.status(500).json({ error: 'Payment processing failed' });
-  }
-});
-
-// Get payments for a device
-app.get('/spinspg/api/payments/:deviceId', isSpinAuth, async (req, res) => {
-  const [payments] = await db.query(
-    'SELECT * FROM spinspg_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
-    [req.params.deviceId]
-  );
-  res.json({ success: true, payments });
-});
-
-// ============================================
-// ORDER LIFECYCLE MANAGEMENT
-// ============================================
-
-// Update order status
-app.post('/spinspg/order/:orderId/status', isSpinAuth, async (req, res) => {
-  try {
-    const { status } = req.body;
-    const orderId = req.params.orderId;
-    
-    if (status === 'in_progress') {
-      await db.query(
-        "UPDATE spinspg_orders SET order_status = 'in_progress', start_time = NOW() WHERE id = ?",
-        [orderId]
-      );
-    } else if (status === 'completed') {
-      await db.query(
-        "UPDATE spinspg_orders SET order_status = 'completed', end_time = NOW() WHERE id = ?",
-        [orderId]
-      );
-      
-      // Get order details for notification
-      const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE id = ?', [orderId]);
-      if (orders.length > 0) {
-        const order = orders[0];
-        
-        // Send email notification if customer has email
-        const [customers] = await db.query(
-          'SELECT * FROM spinspg_customers WHERE customer_unique_id = ?',
-          [order.customer_name]
-        );
-        
-        if (customers.length > 0 && customers[0].email) {
-          await sendEmail(
-            customers[0].email,
-            'Your laundry is ready!',
-            'Your order ' + order.order_number + ' is complete. Please collect your laundry.\n\nService: ' + order.service_type + '\nPrice: Ksh ' + order.price + '\n\nThank you for using SpinSpring!'
-          );
-        }
-      }
-    } else if (status === 'cancelled') {
-      await db.query(
-        "UPDATE spinspg_orders SET order_status = 'cancelled' WHERE id = ?",
-        [orderId]
-      );
-    }
-    
-    req.flash('success_msg', 'Order status updated to ' + status);
-    res.redirect('/spinspg/orders');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to update order');
-    res.redirect('/spinspg/orders');
-  }
-});
-
-// Auto-update order status based on device cycle progress
-setInterval(async () => {
-  try {
-    // Update in_progress orders to completed if device is idle
-    await db.query(`
-      UPDATE spinspg_orders o
-      JOIN spinspg_devices d ON o.device_id = d.device_id
-      SET o.order_status = 'completed', o.end_time = NOW()
-      WHERE o.order_status = 'in_progress' AND d.status = 'idle'
-    `);
-  } catch(err) {}
-}, 60000); // Check every minute
-
-
-// ============================================
-// EMAIL NOTIFICATIONS
-// ============================================
-
-// Notification settings for SpinSpring
-app.get('/spinspg/settings/notifications', isSpinAuth, async (req, res) => {
-  const userId = req.session.spinUser.id;
-  const [settings] = await db.query(
-    'SELECT * FROM spinspg_notification_settings WHERE user_id = ?',
-    [userId]
-  );
-  res.json({ success: true, settings: settings[0] || {} });
-});
-
-app.post('/spinspg/settings/notifications', isSpinAuth, async (req, res) => {
-  const userId = req.session.spinUser.id;
-  const { emailAlerts, lowRevenue, maintenance } = req.body;
-  
-  await db.query(`
-    INSERT INTO spinspg_notification_settings (user_id, email_alerts, low_revenue, maintenance)
-    VALUES (?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE email_alerts = ?, low_revenue = ?, maintenance = ?
-  `, [userId, emailAlerts, lowRevenue, maintenance, emailAlerts, lowRevenue, maintenance]);
-  
-  res.json({ success: true });
-});
-
-// Cycle completion alert
-setInterval(async () => {
-  try {
-    const [completedOrders] = await db.query(`
-      SELECT o.*, c.email as customer_email, c.full_name as customer_name
-      FROM spinspg_orders o
-      LEFT JOIN spinspg_customers c ON o.customer_name = c.customer_unique_id
-      WHERE o.order_status = 'completed' 
-        AND o.end_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
-        AND c.email IS NOT NULL
-    `);
-    
-    for (const order of completedOrders) {
-      await sendEmail(
-        order.customer_email,
-        'Your laundry is ready for pickup!',
-        'Hello ' + (order.customer_name || 'Customer') + ',\n\nYour order ' + order.order_number + ' is complete.\n\nService: ' + order.service_type.replace('_', ' → ') + '\nCycle: ' + order.cycle_type + '\nPrice: Ksh ' + order.price + '\n\nPlease collect your laundry. Thank you for using SpinSpring!'
-      );
-    }
-  } catch(err) {}
-}, 300000); // Check every 5 minutes
-
-// Low revenue alert
-setInterval(async () => {
-  try {
-    const [lowRevenue] = await db.query(`
-      SELECT d.*, u.email
-      FROM spinspg_devices d
-      LEFT JOIN spinspg_users u ON d.owner_id = u.id
-      WHERE d.today_revenue < 500 AND d.status = 'online'
-        AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
-    `);
-    
-    for (const device of lowRevenue) {
-      if (device.email && isBusinessHours()) {
-        await sendEmail(
-          device.email,
-          'Low revenue alert for ' + device.device_name,
-          device.device_name + ' has only made Ksh ' + device.today_revenue + ' today.\n\nCheck your machine: https://ardthonsolutions.com/spinspg/device/' + device.device_id
-        );
-      }
-    }
-  } catch(err) {}
-}, 3600000); // Check every hour
-
-
-// ============================================
-// SETTINGS ROUTES
-// ============================================
-
-// Business info update
-app.post('/spinspg/settings/business', isSpinAuth, async (req, res) => {
-  try {
-    const { business_name, phone } = req.body;
-    const userId = req.session.spinUser.id;
-    
-    await db.query(
-      'UPDATE spinspg_users SET business_name = ?, phone = ? WHERE id = ?',
-      [business_name, phone, userId]
-    );
-    
-    req.session.spinUser.business = business_name;
-    req.flash('success_msg', 'Business info updated!');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to update business info');
-  }
-  res.redirect('/spinspg/settings');
-});
-
-// Password change
-app.post('/spinspg/settings/password', isSpinAuth, async (req, res) => {
-  try {
-    const { current_password, new_password, confirm_password } = req.body;
-    const bcrypt = require('bcryptjs');
-    const userId = req.session.spinUser.id;
-    
-    if (new_password !== confirm_password) {
-      req.flash('error_msg', 'New passwords do not match');
-      return res.redirect('/spinspg/settings');
-    }
-    
-    const [users] = await db.query('SELECT password FROM spinspg_users WHERE id = ?', [userId]);
-    const match = await bcrypt.compare(current_password, users[0].password);
-    
-    if (!match) {
-      req.flash('error_msg', 'Current password is incorrect');
-      return res.redirect('/spinspg/settings');
-    }
-    
-    const hash = await bcrypt.hash(new_password, 10);
-    await db.query('UPDATE spinspg_users SET password = ? WHERE id = ?', [hash, userId]);
-    
-    req.flash('success_msg', 'Password changed successfully!');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to change password');
-  }
-  res.redirect('/spinspg/settings');
-});
-
-// Default machine settings
-app.post('/spinspg/settings/defaults', isSpinAuth, async (req, res) => {
-  try {
-    const { default_price, default_cycle } = req.body;
-    const userId = req.session.spinUser.id;
-    
-    // Update all devices for this owner
-    await db.query(
-      'UPDATE spinspg_devices SET price_per_cycle = ? WHERE owner_id = ?',
-      [default_price, userId]
-    );
-    
-    req.flash('success_msg', 'Default settings updated!');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to update defaults');
-  }
-  res.redirect('/spinspg/settings');
-});
-
-// ============================================
-// REPORTS ENHANCEMENT
-// ============================================
-
-// Export CSV
-app.get('/spinspg/export/orders', isSpinAuth, async (req, res) => {
-  try {
-    const userId = req.session.spinUser.id;
-    const [orders] = await db.query(
-      'SELECT order_number, customer_name, service_type, cycle_type, price, payment_status, order_status, created_at FROM spinspg_orders WHERE user_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
-    
-    let csv = 'Order Number,Customer,Service,Cycle,Price,Payment,Status,Date\n';
-    orders.forEach(o => {
-      csv += `${o.order_number},${o.customer_name},${o.service_type},${o.cycle_type},${o.price},${o.payment_status},${o.order_status},${o.created_at}\n`;
-    });
-    
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=spinspring_orders_${new Date().toISOString().split('T')[0]}.csv`);
-    res.send(csv);
-  } catch(err) {
-    res.redirect('/spinspg/reports');
-  }
-});
-
-// Export revenue CSV
-app.get('/spinspg/export/revenue', isSpinAuth, async (req, res) => {
-  try {
-    const userId = req.session.spinUser.id;
-    const [devices] = await db.query(
-      'SELECT device_name, device_type, cycles_completed, today_revenue, total_revenue FROM spinspg_devices WHERE owner_id = ?',
-      [userId]
-    );
-    
-    let csv = 'Machine,Type,Total Cycles,Today Revenue,Total Revenue\n';
-    devices.forEach(d => {
-      csv += `${d.device_name},${d.device_type},${d.cycles_completed},${d.today_revenue},${d.total_revenue}\n`;
-    });
-    
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=spinspring_revenue_${new Date().toISOString().split('T')[0]}.csv`);
-    res.send(csv);
-  } catch(err) {
-    res.redirect('/spinspg/reports');
-  }
-});
-
-// API for charts
-app.get('/spinspg/api/chart-data', isSpinAuth, async (req, res) => {
-  try {
-    const userId = req.session.spinUser.id;
-    
-    // Daily revenue for last 7 days
-    const [daily] = await db.query(`
-      SELECT DATE(created_at) as date, SUM(price) as revenue, COUNT(*) as orders
-      FROM spinspg_orders
-      WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-      GROUP BY DATE(created_at)
-      ORDER BY date
-    `, [userId]);
-    
-    // Hourly distribution
-    const [hourly] = await db.query(`
-      SELECT HOUR(created_at) as hour, COUNT(*) as orders
-      FROM spinspg_orders
-      WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-      GROUP BY HOUR(created_at)
-      ORDER BY hour
-    `, [userId]);
-    
-    res.json({ success: true, daily, hourly });
-  } catch(err) {
-    res.json({ success: false });
-  }
-});
-
-// ============================================
-// WEIGHT-BASED PRICING SYSTEM
-// ============================================
-
-// Helper: Calculate price from weight
-function calculateWeightPrice(weightKg, pricePerKg) {
-  if (!weightKg || !pricePerKg) return 0;
-  return parseFloat((weightKg * pricePerKg).toFixed(2));
-}
-
-// Owner: Update machine weight settings
-app.post('/spinspg/device/:deviceId/weight-settings', isSpinAuth, async (req, res) => {
-  try {
-    const { price_per_kg, max_capacity_kg, min_capacity_kg } = req.body;
-    const userId = req.session.spinUser.id;
-    
-    await db.query(
-      'UPDATE spinspg_devices SET price_per_kg = ?, max_capacity_kg = ?, min_capacity_kg = ? WHERE device_id = ? AND owner_id = ?',
-      [price_per_kg, max_capacity_kg, min_capacity_kg || 1, req.params.deviceId, userId]
-    );
-    
-    req.flash('success_msg', 'Weight settings updated!');
-    res.redirect(`/spinspg/device/${req.params.deviceId}`);
-  } catch(err) {
-    req.flash('error_msg', 'Failed to update weight settings');
-    res.redirect(`/spinspg/device/${req.params.deviceId}`);
-  }
-});
-
-// Attendant: Create weight-based order
-app.post('/spinspg/attendant/orders', isSpinAttendant, async (req, res) => {
-  try {
-    const { device_id, customer_id, service_type, cycle_type, weight_kg, payment_status } = req.body;
-    const ownerId = req.session.spinUser.ownerId;
-    const orderNumber = 'SS-' + Date.now().toString(36).toUpperCase();
-    
-    // Get machine's price per kg
-    const [devices] = await db.query(
-      'SELECT price_per_kg, max_capacity_kg, min_capacity_kg FROM spinspg_devices WHERE device_id = ?',
-      [device_id]
-    );
-    
-    if (devices.length === 0) {
-      req.flash('error_msg', 'Machine not found');
-      return res.redirect('/spinspg/attendant');
-    }
-    
-    const machine = devices[0];
-    const weight = parseFloat(weight_kg);
-    
-    // Validate weight against machine capacity
-    if (weight > parseFloat(machine.max_capacity_kg)) {
-      req.flash('error_msg', `Weight exceeds machine capacity! Max: ${machine.max_capacity_kg}kg`);
-      return res.redirect('/spinspg/attendant');
-    }
-    
-    if (weight < parseFloat(machine.min_capacity_kg || 1)) {
-      req.flash('error_msg', `Weight below minimum! Min: ${machine.min_capacity_kg || 1}kg`);
-      return res.redirect('/spinspg/attendant');
-    }
-    
-    // Calculate price
-    const totalPrice = calculateWeightPrice(weight, parseFloat(machine.price_per_kg));
-    
-    await db.query(
-      `INSERT INTO spinspg_orders (order_number, device_id, user_id, customer_name, service_type, cycle_type, price, weight_kg, price_per_kg, total_weight_price, payment_status, order_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
-      [orderNumber, device_id, ownerId, customer_id, service_type, cycle_type, totalPrice, weight, machine.price_per_kg, totalPrice, payment_status]
-    );
-    
-    // Update customer stats
-    if (customer_id !== 'walk-in') {
-      await db.query(
-        'UPDATE spinspg_customers SET total_cycles = total_cycles + 1, total_spent = total_spent + ?, loyalty_points = loyalty_points + FLOOR(?/100) WHERE customer_unique_id = ?',
-        [totalPrice, totalPrice, customer_id]
-      );
-    }
-    
-    req.flash('success_msg', `Order ${orderNumber} created! ${weight}kg × Ksh ${machine.price_per_kg}/kg = Ksh ${totalPrice}`);
-    res.redirect('/spinspg/attendant');
-  } catch(err) {
-    console.error('Order error:', err);
-    req.flash('error_msg', 'Failed to create order');
-    res.redirect('/spinspg/attendant');
-  }
-});
-
-// API: Get machine weight settings for real-time calculation
-app.get('/spinspg/api/machine/:deviceId/weight', isSpinAuth, async (req, res) => {
-  try {
-    const [devices] = await db.query(
-      'SELECT price_per_kg, max_capacity_kg, min_capacity_kg FROM spinspg_devices WHERE device_id = ?',
-      [req.params.deviceId]
-    );
-    if (devices.length === 0) {
-      return res.json({ success: false, error: 'Machine not found' });
-    }
-    res.json({ success: true, machine: devices[0] });
-  } catch(err) {
-    res.json({ success: false, error: err.message });
-  }
-});
-
-// Register device handler
 app.post('/attendx/register-device', isAttendXAuth, async (req, res) => {
   try {
     const { device_name, location, mode } = req.body;
@@ -794,7 +405,6 @@ app.post('/attendx/register-device', isAttendXAuth, async (req, res) => {
   }
 });
 
-// Device credentials page
 app.get('/attendx/device-credentials', isAttendXAuth, (req, res) => {
   const device = req.session.newAttendXDevice;
   if (!device) return res.redirect('/attendx/dashboard');
@@ -802,7 +412,6 @@ app.get('/attendx/device-credentials', isAttendXAuth, (req, res) => {
   res.render('attendx/device-credentials', { title: 'Device Credentials - AttendX', device });
 });
 
-// Device detail page
 app.get('/attendx/device/:deviceId', isAttendXAuth, async (req, res) => {
   try {
     const userId = req.session.attendxUser.id;
@@ -820,19 +429,16 @@ app.get('/attendx/device/:deviceId', isAttendXAuth, async (req, res) => {
 
     const device = devices[0];
 
-    // Get today's records
     const [records] = await db.query(
       'SELECT * FROM attendx_records WHERE device_id = ? ORDER BY recorded_at DESC LIMIT 50',
       [deviceId]
     );
 
-    // Get students
     const [students] = await db.query(
       'SELECT * FROM attendx_students WHERE device_id = ? ORDER BY full_name',
       [deviceId]
     );
 
-    // Get today stats
     const [todayStats] = await db.query(
       `SELECT
         SUM(CASE WHEN event_type = 'entry' THEN 1 ELSE 0 END) as entries,
@@ -855,7 +461,6 @@ app.get('/attendx/device/:deviceId', isAttendXAuth, async (req, res) => {
   }
 });
 
-// Add student
 app.post('/attendx/device/:deviceId/student', isAttendXAuth, async (req, res) => {
   try {
     const { deviceId } = req.params;
@@ -877,9 +482,7 @@ app.post('/attendx/device/:deviceId/student', isAttendXAuth, async (req, res) =>
   }
 });
 
-// ===== ATTENDX API ENDPOINTS =====
-
-// Device sync - Receive attendance data from ESP32
+// AttendX API
 app.post('/attendx/api/sync', async (req, res) => {
   try {
     const deviceId = req.headers['x-device-id'];
@@ -900,16 +503,13 @@ app.post('/attendx/api/sync', async (req, res) => {
 
     const data = req.body;
 
-    // Update device status
     await db.query(
       "UPDATE attendx_devices SET status = 'online', last_sync = NOW() WHERE device_id = ?",
       [deviceId]
     );
 
-    // Process attendance events
     if (data.events && Array.isArray(data.events)) {
       for (const event of data.events) {
-        // Get student info
         const [students] = await db.query(
           'SELECT * FROM attendx_students WHERE device_id = ? AND (student_id = ? OR fingerprint_id = ?)',
           [deviceId, event.student_id, event.fingerprint_id]
@@ -917,13 +517,11 @@ app.post('/attendx/api/sync', async (req, res) => {
 
         const student = students.length > 0 ? students[0] : null;
 
-        // Record attendance
         await db.query(
           'INSERT INTO attendx_records (device_id, student_id, student_name, event_type, parent_phone, sms_sent) VALUES (?, ?, ?, ?, ?, ?)',
           [deviceId, event.student_id, student ? student.full_name : 'Unknown', event.event_type, student ? student.parent_phone : null, 0]
         );
 
-        // Queue SMS if parent phone exists
         if (student && student.parent_phone) {
           const time = new Date().toLocaleTimeString('en-KE', { hour12: true });
           const action = event.event_type === 'entry' ? 'ARRIVED at' : 'DEPARTED from';
@@ -944,7 +542,6 @@ app.post('/attendx/api/sync', async (req, res) => {
   }
 });
 
-// API: Get dashboard data for auto-refresh
 app.get('/attendx/api/dashboard-data', isAttendXAuth, async (req, res) => {
   try {
     const userId = req.session.attendxUser.id;
@@ -972,7 +569,9 @@ app.get('/attendx/api/dashboard-data', isAttendXAuth, async (req, res) => {
   }
 });
 
-// ALLERSAFE Routes
+// ============================================
+// ALLERSAFE, ATTENDX, HEALTH ROUTES
+// ============================================
 const allersafeRoutes = require('./routes/allersafe');
 const attendxRoutes = require('./routes/attendx');
 const healthRoutes = require('./routes/health');
@@ -980,7 +579,9 @@ app.use('/allersafe', allersafeRoutes);
 app.use('/attendx', attendxRoutes);
 app.use('/health', healthRoutes);
 
-// Products
+// ============================================
+// PRODUCTS
+// ============================================
 app.get('/products', async (req, res) => {
   try {
     const [products] = await db.query('SELECT * FROM products ORDER BY createdAt DESC');
@@ -1011,7 +612,6 @@ app.get('/products', async (req, res) => {
   }
 });
 
-// Product Detail
 app.get('/products/:slug', async (req, res) => {
   try {
     const [products] = await db.query('SELECT * FROM products WHERE slug = ?', [req.params.slug]);
@@ -1046,7 +646,9 @@ app.get('/products/:slug', async (req, res) => {
   }
 });
 
-// Projects
+// ============================================
+// PROJECTS
+// ============================================
 app.get('/projects', async (req, res) => {
   try {
     const [projects] = await db.query('SELECT * FROM projects WHERE isPublished = 1 ORDER BY createdAt DESC');
@@ -1076,7 +678,6 @@ app.get('/projects', async (req, res) => {
   }
 });
 
-// Project Detail
 app.get('/projects/:slug', async (req, res) => {
   try {
     const [projects] = await db.query(
@@ -1113,7 +714,9 @@ app.get('/projects/:slug', async (req, res) => {
   }
 });
 
-// Blog
+// ============================================
+// BLOG
+// ============================================
 app.get('/blog', async (req, res) => {
   try {
     const [blogs] = await db.query(
@@ -1130,7 +733,6 @@ app.get('/blog', async (req, res) => {
   }
 });
 
-// Blog Detail
 app.get('/blog/:slug', async (req, res) => {
   try {
     const [blogs] = await db.query(
@@ -1155,7 +757,9 @@ app.get('/blog/:slug', async (req, res) => {
   }
 });
 
-// Auth - Login
+// ============================================
+// AUTH
+// ============================================
 app.get('/auth/login', (req, res) => {
   if (req.session.user) return res.redirect('/dashboard');
   res.render('auth/login', { title: 'Login - Ardthon Solutions' });
@@ -1195,7 +799,6 @@ app.post('/auth/login', async (req, res) => {
   }
 });
 
-// Auth - Register
 app.get('/auth/register', (req, res) => {
   if (req.session.user) return res.redirect('/dashboard');
   res.render('auth/register', { title: 'Create Account - Ardthon Solutions' });
@@ -1232,12 +835,13 @@ app.post('/auth/register', async (req, res) => {
   }
 });
 
-// Logout
 app.get('/auth/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/'));
 });
 
-// Dashboard
+// ============================================
+// DASHBOARD
+// ============================================
 app.get('/dashboard', async (req, res) => {
   if (!req.session.user) return res.redirect('/auth/login');
 
@@ -1268,14 +872,15 @@ app.get('/dashboard', async (req, res) => {
   }
 });
 
-// Cart
+// ============================================
+// CART & CHECKOUT
+// ============================================
 app.get('/orders/cart', (req, res) => {
   const cart = req.session.cart || [];
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   res.render('cart', { title: 'Shopping Cart - Ardthon Solutions', cart, total });
 });
 
-// Add to Cart
 app.post('/products/add-to-cart/:id', async (req, res) => {
   try {
     const [products] = await db.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
@@ -1303,7 +908,6 @@ app.post('/products/add-to-cart/:id', async (req, res) => {
   }
 });
 
-// Checkout
 app.get('/orders/checkout', (req, res) => {
   if (!req.session.user) return res.redirect('/auth/login');
   const cart = req.session.cart || [];
@@ -1312,68 +916,20 @@ app.get('/orders/checkout', (req, res) => {
   res.render('checkout', { title: 'Checkout - Ardthon Solutions', cart, total });
 });
 
-// CuePay Routes
-app.get('/cuepay/login', (req, res) => {
-  res.render('cuepay/login', { title: 'CuePay Login - Ardthon Solutions' });
-});
-
-
-// CuePay Dashboard (requires auth) - FIXED
-app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
-  try {
-    const userId = req.session.cuepayUser.id;
-
-    // ONLY get devices belonging to THIS user
-    const [devices] = await db.query(
-      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
-
-    // Calculate battery percentage and time ago for each device
-    devices.forEach(device => {
-      device.battery_percent = device.battery_voltage ?
-        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
-      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
-      device.is_online = device.status === 'online';
-    });
-
-    res.render('cuepay/dashboard', {
-      title: 'CuePay Dashboard - Ardthon Solutions',
-      devices,
-      user: req.session.cuepayUser
-    });
-  } catch(err) {
-    console.error('CuePay dashboard error:', err);
-    res.render('cuepay/dashboard', {
-      title: 'CuePay Dashboard',
-      devices: [],
-      user: req.session.cuepayUser
-    });
-  }
-});
-
-app.get('/cuepay/register-device', (req, res) => {
-  res.render('cuepay/register-device', { title: 'Register CuePay Device' });
-});
-
 // ============================================
 // CUEPAY COMPLETE SYSTEM
 // ============================================
 
-
-// Generate unique API key
 function generateApiKey() {
   return 'CP-' + crypto.randomBytes(16).toString('hex');
 }
 
-// CuePay middleware
 function isCuePayAuth(req, res, next) {
   if (req.session.cuepayUser) return next();
   req.flash('error_msg', 'Please login to CuePay first');
   res.redirect('/cuepay/login');
 }
 
-// CuePay device API auth middleware
 async function validateDeviceApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'];
   const deviceId = req.headers['x-device-id'];
@@ -1399,20 +955,16 @@ async function validateDeviceApiKey(req, res, next) {
   }
 }
 
-// ===== CUEPAY WEB PAGES =====
-
-// CuePay main landing page
+// CuePay Pages
 app.get('/cuepay', (req, res) => {
   res.render('cuepay/login', { title: 'CuePay - Pool Automation System' });
 });
 
-// CuePay Login page
 app.get('/cuepay/login', (req, res) => {
   if (req.session.cuepayUser) return res.redirect('/cuepay/dashboard');
   res.render('cuepay/login', { title: 'CuePay Login - Ardthon Solutions' });
 });
 
-// CuePay Login handler
 app.post('/cuepay/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -1449,13 +1001,11 @@ app.post('/cuepay/login', async (req, res) => {
   }
 });
 
-// CuePay Register page
 app.get('/cuepay/register', (req, res) => {
   if (req.session.cuepayUser) return res.redirect('/cuepay/dashboard');
   res.render('cuepay/register', { title: 'Create CuePay Account' });
 });
 
-// CuePay Register handler
 app.post('/cuepay/register', async (req, res) => {
   try {
     const { email, password, password2, full_name, business_name, phone } = req.body;
@@ -1492,24 +1042,51 @@ app.post('/cuepay/register', async (req, res) => {
   }
 });
 
-// CuePay Logout
 app.get('/cuepay/logout', (req, res) => {
   delete req.session.cuepayUser;
   res.redirect('/cuepay/login');
 });
 
-// Register new device page
+app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+
+    devices.forEach(device => {
+      device.battery_percent = device.battery_voltage ?
+        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
+      device.is_online = device.status === 'online';
+    });
+
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard - Ardthon Solutions',
+      devices,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    console.error('CuePay dashboard error:', err);
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard',
+      devices: [],
+      user: req.session.cuepayUser
+    });
+  }
+});
+
 app.get('/cuepay/register-device', isCuePayAuth, (req, res) => {
   res.render('cuepay/register-device', { title: 'Register New CuePay Device' });
 });
 
-// Register new device handler
 app.post('/cuepay/register-device', isCuePayAuth, async (req, res) => {
   try {
     const { device_name, location, game_price } = req.body;
     const ownerId = req.session.cuepayUser.id;
 
-    // Generate unique device ID and API key
     const deviceId = 'CUEPAY-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(3).toString('hex').toUpperCase();
     const apiKey = generateApiKey();
 
@@ -1519,7 +1096,6 @@ app.post('/cuepay/register-device', isCuePayAuth, async (req, res) => {
       [deviceId, device_name, apiKey, ownerId, location, game_price || 10]
     );
 
-    // Store credentials in session to show once
     req.session.newDevice = {
       device_id: deviceId,
       device_name: device_name,
@@ -1535,12 +1111,9 @@ app.post('/cuepay/register-device', isCuePayAuth, async (req, res) => {
   }
 });
 
-// Device credentials page (shown once after registration)
 app.get('/cuepay/device-credentials', isCuePayAuth, (req, res) => {
   const device = req.session.newDevice;
   if (!device) return res.redirect('/cuepay/dashboard');
-
-  // Clear from session after showing
   delete req.session.newDevice;
 
   res.render('cuepay/device-credentials', {
@@ -1549,7 +1122,6 @@ app.get('/cuepay/device-credentials', isCuePayAuth, (req, res) => {
   });
 });
 
-// Device detail page
 app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
   try {
     const userId = req.session.cuepayUser.id;
@@ -1570,47 +1142,40 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
       Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
     device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
 
-    // ===== USE SERVER TIME FOR TODAY/YESTERDAY =====
-    const today = new Date().toISOString().split('T')[0]; // "2026-05-20"
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]; // "2026-05-19"
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
     const monthStart = today.substring(0, 7) + '-01';
 
-    // Today stats (using server date)
     const [todayStats] = await db.query(
       `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games, COUNT(*) as payments
        FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?`,
       [deviceId, today]
     );
 
-    // Yesterday stats
     const [yesterdayStats] = await db.query(
       `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games
        FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?`,
       [deviceId, yesterday]
     );
 
-    // Week stats
     const [weekStats] = await db.query(
       `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games
        FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) >= ?`,
       [deviceId, weekAgo]
     );
 
-    // Month stats
     const [monthStats] = await db.query(
       `SELECT COALESCE(SUM(amount), 0) as revenue, COALESCE(SUM(games_earned), 0) as games
        FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) >= ?`,
       [deviceId, monthStart]
     );
 
-    // Recent payments
     const [payments] = await db.query(
       'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
       [deviceId]
     );
 
-    // Pending commands
     const [commands] = await db.query(
       "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10",
       [deviceId]
@@ -1632,15 +1197,12 @@ app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
   }
 });
 
-
-// Send command to device - FIXED
 app.post('/cuepay/device/:deviceId/command', isCuePayAuth, async (req, res) => {
   try {
     const { deviceId } = req.params;
     const { command_type, command_value } = req.body;
     const userId = req.session.cuepayUser.id;
 
-    // Verify device belongs to THIS user
     const [devices] = await db.query(
       'SELECT id FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
       [deviceId, userId]
@@ -1651,30 +1213,27 @@ app.post('/cuepay/device/:deviceId/command', isCuePayAuth, async (req, res) => {
       return res.redirect('/cuepay/dashboard');
     }
 
-    // Insert command
     await db.query(
       "INSERT INTO cuepay_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
       [deviceId, command_type, command_value]
     );
 
- // Update device immediately based on command type
-if (command_type === 'change_price') {
-  await db.query(
-    'UPDATE cuepay_devices SET game_price = ? WHERE device_id = ? AND owner_id = ?',
-    [parseFloat(command_value), deviceId, userId]
-  );
-} else if (command_type === 'add_games') {
-  await db.query(
-    'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ? AND owner_id = ?',
-    [parseInt(command_value), deviceId, userId]
-  );
-}
- else if (command_type === 'remove_games') {
-  await db.query(
-    'UPDATE cuepay_devices SET games_available = GREATEST(games_available - ?, 0) WHERE device_id = ? AND owner_id = ?',
-    [parseInt(command_value), deviceId, userId]
-  );
-}
+    if (command_type === 'change_price') {
+      await db.query(
+        'UPDATE cuepay_devices SET game_price = ? WHERE device_id = ? AND owner_id = ?',
+        [parseFloat(command_value), deviceId, userId]
+      );
+    } else if (command_type === 'add_games') {
+      await db.query(
+        'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ? AND owner_id = ?',
+        [parseInt(command_value), deviceId, userId]
+      );
+    } else if (command_type === 'remove_games') {
+      await db.query(
+        'UPDATE cuepay_devices SET games_available = GREATEST(games_available - ?, 0) WHERE device_id = ? AND owner_id = ?',
+        [parseInt(command_value), deviceId, userId]
+      );
+    }
 
     req.flash('success_msg', `Command sent! Device will update on next sync.`);
     res.redirect(`/cuepay/device/${deviceId}`);
@@ -1685,15 +1244,12 @@ if (command_type === 'change_price') {
   }
 });
 
-// ===== CUEPAY API ENDPOINTS (For ESP32 devices) =====
-
-// Device sync endpoint - Called by ESP32
+// CuePay API Endpoints
 app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
   try {
     const device = req.cuepayDevice;
     const data = req.body;
 
-    // Update device live data
     await db.query(
       `UPDATE cuepay_devices SET
         status = 'online',
@@ -1716,7 +1272,6 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
       ]
     );
 
-    // Save payments
     if (data.recent_payments && Array.isArray(data.recent_payments)) {
       for (const payment of data.recent_payments) {
         if (payment.transaction_id) {
@@ -1729,13 +1284,11 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
       }
     }
 
-    // Get pending commands
     const [commands] = await db.query(
       "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
       [device.device_id]
     );
 
-    // Mark commands as sent
     if (commands.length > 0) {
       const commandIds = commands.map(c => c.id);
       await db.query(
@@ -1744,7 +1297,6 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
       );
     }
 
-    // Get current device settings
     const [currentDevice] = await db.query(
       'SELECT game_price FROM cuepay_devices WHERE device_id = ?',
       [device.device_id]
@@ -1766,7 +1318,6 @@ app.post('/cuepay/api/sync', validateDeviceApiKey, async (req, res) => {
   }
 });
 
-// Get device status (for device to check if it should be online)
 app.get('/cuepay/api/device-status', validateDeviceApiKey, async (req, res) => {
   const [commands] = await db.query(
     "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 5",
@@ -1785,623 +1336,527 @@ app.get('/cuepay/api/device-status', validateDeviceApiKey, async (req, res) => {
   });
 });
 
-// ============================================
-// CUEPAY ANALYTICS & ENHANCED DASHBOARD
-// ============================================
+app.get('/cuepay/api/time', async (req, res) => {
+  const now = new Date();
+  const timezone = req.query.tz || 'Africa/Nairobi';
+  res.json({
+    timestamp: now.toISOString(),
+    unix: Math.floor(now.getTime() / 1000),
+    time: now.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', hour12: false }),
+    date: now.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' }),
+    timezone: timezone
+  });
+});
 
-// Helper: Get device stats for date range
-async function getDeviceStats(deviceId, startDate, endDate) {
-  const [stats] = await db.query(
-    `SELECT
-      COUNT(*) as total_payments,
-      COALESCE(SUM(games_earned), 0) as total_games,
-      COALESCE(SUM(amount), 0) as total_revenue,
-      COALESCE(AVG(amount), 0) as avg_payment,
-      COUNT(DISTINCT customer_number) as unique_customers,
-      MIN(payment_time) as first_payment,
-      MAX(payment_time) as last_payment
-     FROM cuepay_payments
-     WHERE device_id = ? AND payment_time >= ? AND payment_time <= ?`,
-    [deviceId, startDate, endDate]
-  );
-  return stats[0];
-}
+// Offline detection
+setInterval(async () => {
+  try {
+    await db.query(
+      "UPDATE cuepay_devices SET status = 'offline' WHERE status = 'online' AND last_sync < DATE_SUB(NOW(), INTERVAL 60 SECOND)"
+    );
+  } catch(e) {}
+}, 30000);
 
-// Helper: Get peak hour
-async function getPeakHour(deviceId, date) {
-  const [hours] = await db.query(
-    `SELECT HOUR(payment_time) as hour, COUNT(*) as count, SUM(amount) as revenue
-     FROM cuepay_payments
-     WHERE device_id = ? AND DATE(payment_time) = ?
-     GROUP BY HOUR(payment_time)
-     ORDER BY count DESC LIMIT 1`,
-    [deviceId, date]
-  );
-  return hours[0] || null;
-}
+app.post('/cuepay/api/heartbeat', validateDeviceApiKey, async (req, res) => {
+  try {
+    const device = req.cuepayDevice;
+    await db.query(
+      "UPDATE cuepay_devices SET status = 'online', last_sync = NOW() WHERE device_id = ?",
+      [device.device_id]
+    );
+    res.json({ status: 'ok', server_time: new Date().toISOString() });
+  } catch(err) {
+    res.status(500).json({ error: 'Heartbeat failed' });
+  }
+});
 
-// Enhanced CuePay Dashboard with Analytics
-app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
+app.get('/cuepay/api/dashboard-data', isCuePayAuth, async (req, res) => {
   try {
     const userId = req.session.cuepayUser.id;
-    const today = new Date().toISOString().split('T')[0];
-    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-
     const [devices] = await db.query(
-      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      'SELECT device_id, device_name, games_available, battery_voltage, status, last_sync, today_revenue, today_games, game_price FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
       [userId]
     );
+    res.json({ success: true, devices, timestamp: new Date().toISOString() });
+  } catch(err) {
+    res.status(500).json({ success: false, error: 'Failed to load data' });
+  }
+});
 
-    // Enrich each device with stats
-    for (let device of devices) {
-      device.battery_percent = device.battery_voltage ?
-        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
-      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
-      device.is_online = device.status === 'online';
+// ============================================
+// ADMIN DASHBOARD
+// ============================================
 
-      // Today stats
-      const todayStats = await getDeviceStats(device.device_id, today + ' 00:00:00', today + ' 23:59:59');
-      device.today_games = todayStats.total_games;
-      device.today_revenue = todayStats.total_revenue;
-      device.today_payments = todayStats.total_payments;
-      device.today_customers = todayStats.unique_customers;
+function isAdmin(req, res, next) {
+  if (req.session.user && req.session.user.role === 'admin') return next();
+  req.flash('error_msg', 'Admin access required');
+  res.redirect('/auth/login');
+}
 
-      // Week stats
-      const weekStats = await getDeviceStats(device.device_id, weekAgo + ' 00:00:00', today + ' 23:59:59');
-      device.week_games = weekStats.total_games;
-      device.week_revenue = weekStats.total_revenue;
-      device.week_avg_payment = weekStats.avg_payment;
+app.get('/admin', isAdmin, async (req, res) => {
+  try {
+    const [devices] = await db.query(`
+      SELECT d.*, u.email, u.full_name as owner_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      ORDER BY d.created_at DESC
+    `);
 
-      // Month stats
-      const monthStats = await getDeviceStats(device.device_id, monthAgo + ' 00:00:00', today + ' 23:59:59');
-      device.month_games = monthStats.total_games;
-      device.month_revenue = monthStats.total_revenue;
+    const [stats] = await db.query(`
+      SELECT
+        COUNT(*) as total_devices,
+        SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online_devices,
+        SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline_devices,
+        COALESCE(SUM(today_revenue), 0) as total_today_revenue,
+        COALESCE(SUM(total_revenue), 0) as total_all_revenue
+      FROM cuepay_devices
+    `);
 
-      // Peak hour today
-      const peak = await getPeakHour(device.device_id, today);
-      device.peak_hour = peak ? peak.hour : null;
-      device.peak_hour_count = peak ? peak.count : 0;
-
-      // Daily breakdown for chart (last 7 days)
-      const [dailyBreakdown] = await db.query(
-        `SELECT DATE(payment_time) as date,
-                SUM(amount) as revenue,
-                SUM(games_earned) as games,
-                COUNT(*) as payments
-         FROM cuepay_payments
-         WHERE device_id = ? AND payment_time >= ?
-         GROUP BY DATE(payment_time)
-         ORDER BY date DESC LIMIT 7`,
-        [device.device_id, weekAgo + ' 00:00:00']
-      );
-      device.daily_breakdown = dailyBreakdown.reverse();
-
-      // Last 10 payments
-      const [recentPayments] = await db.query(
-        'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 10',
-        [device.device_id]
-      );
-      device.recent_payments = recentPayments;
-    }
-
-    res.render('cuepay/dashboard', {
-      title: 'CuePay Dashboard - Ardthon Solutions',
+    res.render('admin/dashboard', {
+      title: 'Admin Dashboard - Ardthon Solutions',
       devices,
-      user: req.session.cuepayUser
+      stats: stats[0],
+      user: req.session.user
     });
   } catch(err) {
-    console.error('Dashboard error:', err);
-    res.render('cuepay/dashboard', {
-      title: 'CuePay Dashboard',
+    console.error('Admin dashboard error:', err);
+    res.render('admin/dashboard', {
+      title: 'Admin Dashboard',
       devices: [],
-      user: req.session.cuepayUser
+      stats: { total_devices: 0, online_devices: 0, offline_devices: 0, total_today_revenue: 0, total_all_revenue: 0 },
+      user: req.session.user
     });
   }
 });
 
-// Device Detail with Full Analytics
-app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
+app.get('/admin/device/:deviceId', isAdmin, async (req, res) => {
   try {
-    const userId = req.session.cuepayUser.id;
     const { deviceId } = req.params;
-    const { period } = req.query; // day, week, month
 
-    const [devices] = await db.query(
-      'SELECT * FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
-      [deviceId, userId]
-    );
+    const [devices] = await db.query(`
+      SELECT d.*, u.username, u.email, u.fullName as owner_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.device_id = ?
+    `, [deviceId]);
 
     if (devices.length === 0) {
       req.flash('error_msg', 'Device not found');
-      return res.redirect('/cuepay/dashboard');
+      return res.redirect('/admin');
     }
 
     const device = devices[0];
     device.battery_percent = device.battery_voltage ?
       Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
 
-    const today = new Date().toISOString().split('T')[0];
-    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const monthStart = new Date().toISOString().split('T')[0].substring(0, 7) + '-01';
-
-    // Today stats
-    const todayStats = await getDeviceStats(deviceId, today + ' 00:00:00', today + ' 23:59:59');
-
-    // Week stats
-    const weekStats = await getDeviceStats(deviceId, weekAgo + ' 00:00:00', today + ' 23:59:59');
-
-    // Month stats
-    const monthStats = await getDeviceStats(deviceId, monthStart + ' 00:00:00', today + ' 23:59:59');
-
-    // Hourly breakdown for today
-    const [hourlyBreakdown] = await db.query(
-      `SELECT HOUR(payment_time) as hour,
-              SUM(amount) as revenue,
-              SUM(games_earned) as games,
-              COUNT(*) as payments,
-              COUNT(DISTINCT customer_number) as customers
-       FROM cuepay_payments
-       WHERE device_id = ? AND DATE(payment_time) = ?
-       GROUP BY HOUR(payment_time)
-       ORDER BY hour`,
-      [deviceId, today]
-    );
-
-    // Daily breakdown for last 30 days
-    const [dailyBreakdown] = await db.query(
-      `SELECT DATE(payment_time) as date,
-              SUM(amount) as revenue,
-              SUM(games_earned) as games,
-              COUNT(*) as payments,
-              COUNT(DISTINCT customer_number) as customers
-       FROM cuepay_payments
-       WHERE device_id = ? AND payment_time >= ?
-       GROUP BY DATE(payment_time)
-       ORDER BY date DESC`,
-      [deviceId, new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
-    );
-
-    // Weekly summary
-    const [weeklySummary] = await db.query(
-      `SELECT YEARWEEK(payment_time, 1) as yw,
-              MIN(DATE(payment_time)) as week_start,
-              MAX(DATE(payment_time)) as week_end,
-              SUM(amount) as revenue,
-              SUM(games_earned) as games,
-              COUNT(*) as payments
-       FROM cuepay_payments
-       WHERE device_id = ? AND payment_time >= ?
-       GROUP BY YEARWEEK(payment_time, 1)
-       ORDER BY yw DESC LIMIT 12`,
-      [deviceId, new Date(Date.now() - 84 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
-    );
-
-    // Top customers
-    const [topCustomers] = await db.query(
-      `SELECT customer_number,
-              COUNT(*) as visits,
-              SUM(amount) as total_spent,
-              SUM(games_earned) as total_games,
-              MAX(payment_time) as last_visit
-       FROM cuepay_payments
-       WHERE device_id = ? AND customer_number != 'Unknown'
-       GROUP BY customer_number
-       ORDER BY total_spent DESC LIMIT 10`,
-      [deviceId]
-    );
-
-    // Recent payments
     const [payments] = await db.query(
-      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
+      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 100',
       [deviceId]
     );
 
-    // Pending commands
     const [commands] = await db.query(
-      "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10",
+      'SELECT * FROM cuepay_commands WHERE device_id = ? ORDER BY created_at DESC LIMIT 50',
       [deviceId]
     );
 
-    res.render('cuepay/device-detail', {
-      title: `${device.device_name} - CuePay Analytics`,
+    const [alerts] = await db.query(
+      'SELECT * FROM cuepay_alert_history WHERE device_id = ? ORDER BY created_at DESC LIMIT 20',
+      [deviceId]
+    );
+
+    res.render('admin/device-detail', {
+      title: `${device.device_name} - Admin`,
       device,
-      todayStats,
-      weekStats,
-      monthStats,
-      hourlyBreakdown,
-      dailyBreakdown,
-      weeklySummary,
-      topCustomers,
       payments,
       commands,
-      selectedPeriod: period || 'today'
+      alerts,
+      user: req.session.user
     });
   } catch(err) {
-    console.error('Device detail error:', err);
-    res.redirect('/cuepay/dashboard');
+    console.error('Admin device detail error:', err);
+    res.redirect('/admin');
   }
 });
 
-// API: Get device analytics JSON
-app.get('/cuepay/api/analytics/:deviceId', isCuePayAuth, async (req, res) => {
+app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
   try {
-    const userId = req.session.cuepayUser.id;
     const { deviceId } = req.params;
+    const { command_type, command_value } = req.body;
 
-    // Verify ownership
-    const [devices] = await db.query(
-      'SELECT id FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
-      [deviceId, userId]
-    );
-    if (devices.length === 0) return res.status(403).json({ error: 'Access denied' });
-
-    const today = new Date().toISOString().split('T')[0];
-
-    // Hourly breakdown
-    const [hourly] = await db.query(
-      `SELECT HOUR(payment_time) as hour, SUM(amount) as revenue, SUM(games_earned) as games, COUNT(*) as payments
-       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?
-       GROUP BY HOUR(payment_time) ORDER BY hour`,
-      [deviceId, today]
+    await db.query(
+      "INSERT INTO cuepay_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
+      [deviceId, command_type, command_value]
     );
 
-    // Daily breakdown (7 days)
-    const [daily] = await db.query(
-      `SELECT DATE(payment_time) as date, SUM(amount) as revenue, SUM(games_earned) as games
-       FROM cuepay_payments WHERE device_id = ? AND payment_time >= ?
-       GROUP BY DATE(payment_time) ORDER BY date DESC LIMIT 7`,
-      [deviceId, new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
-    );
-
-    res.json({ hourly: hourly.reverse(), daily: daily.reverse() });
-  } catch(err) {
-    res.status(500).json({ error: 'Failed to get analytics' });
-  }
-});
-
-// ============================================
-// CUE PAY COMPLETE ANALYTICS & MANAGEMENT
-// ============================================
-
-// Helper: Calculate customer retention
-async function getCustomerRetention(deviceId, days) {
-  const [result] = await db.query(
-    `SELECT
-      COUNT(DISTINCT customer_number) as total_customers,
-      COUNT(DISTINCT CASE WHEN visits >= 2 THEN customer_number END) as returning_customers,
-      COUNT(DISTINCT CASE WHEN visits = 1 THEN customer_number END) as new_customers
-     FROM (
-       SELECT customer_number, COUNT(*) as visits
-       FROM cuepay_payments
-       WHERE device_id = ? AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
-         AND customer_number != 'Unknown'
-       GROUP BY customer_number
-     ) t`,
-    [deviceId, days]
-  );
-  return result[0];
-}
-
-// ===== FINANCIAL REPORTS =====
-
-// Daily Summary Report
-app.get('/cuepay/reports/daily', isCuePayAuth, async (req, res) => {
-  try {
-    const userId = req.session.cuepayUser.id;
-    const date = req.query.date || new Date().toISOString().split('T')[0];
-
-    const [devices] = await db.query(
-      'SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?',
-      [userId]
-    );
-
-    const reports = [];
-    for (const device of devices) {
-      const [stats] = await db.query(
-        `SELECT
-          COUNT(*) as payments,
-          SUM(amount) as revenue,
-          SUM(games_earned) as games,
-          COUNT(DISTINCT customer_number) as customers,
-          AVG(amount) as avg_payment,
-          MIN(payment_time) as first_game,
-          MAX(payment_time) as last_game
-         FROM cuepay_payments
-         WHERE device_id = ? AND DATE(payment_time) = ?`,
-        [device.device_id, date]
+    if (command_type === 'change_price') {
+      await db.query('UPDATE cuepay_devices SET game_price = ? WHERE device_id = ?',
+        [parseFloat(command_value), deviceId]);
+    } else if (command_type === 'add_games') {
+      await db.query(
+        'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ?',
+        [parseInt(command_value), deviceId]
       );
-
-      const [hourly] = await db.query(
-        `SELECT HOUR(payment_time) as hour, SUM(amount) as revenue, COUNT(*) as payments
-         FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?
-         GROUP BY HOUR(payment_time) ORDER BY hour`,
-        [device.device_id, date]
-      );
-
-      reports.push({
-        ...device,
-        stats: stats[0],
-        hourly_breakdown: hourly
-      });
     }
 
-    // Check goals
-    const [goals] = await db.query(
-      'SELECT * FROM cuepay_goals WHERE owner_id = ? AND is_active = 1 AND start_date <= ? AND (end_date >= ? OR end_date IS NULL)',
-      [userId, date, date]
-    );
-
-    res.render('cuepay/reports/daily', {
-      title: 'Daily Report - CuePay',
-      reports,
-      goals,
-      selectedDate: date,
-      user: req.session.cuepayUser
-    });
+    req.flash('success_msg', `Command "${command_type}" sent to ${deviceId}`);
+    res.redirect(`/admin/device/${deviceId}`);
   } catch(err) {
-    console.error('Daily report error:', err);
-    res.redirect('/cuepay/dashboard');
+    console.error('Admin command error:', err);
+    req.flash('error_msg', 'Failed to send command');
+    res.redirect('/admin');
   }
 });
 
-// Weekly Report
-app.get('/cuepay/reports/weekly', isCuePayAuth, async (req, res) => {
+app.post('/admin/device/:deviceId/delete', isAdmin, async (req, res) => {
   try {
-    const userId = req.session.cuepayUser.id;
-    const [devices] = await db.query('SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?', [userId]);
+    const { deviceId } = req.params;
 
-    const reports = [];
-    for (const device of devices) {
-      const [dailyStats] = await db.query(
-        `SELECT DATE(payment_time) as date,
-                DAYNAME(payment_time) as day_name,
-                SUM(amount) as revenue,
-                SUM(games_earned) as games,
-                COUNT(*) as payments,
-                COUNT(DISTINCT customer_number) as customers
-         FROM cuepay_payments
-         WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-         GROUP BY DATE(payment_time)
-         ORDER BY date DESC`,
+    await db.query('DELETE FROM cuepay_payments WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_commands WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_alerts WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_alert_history WHERE device_id = ?', [deviceId]);
+    await db.query('DELETE FROM cuepay_devices WHERE device_id = ?', [deviceId]);
+
+    req.flash('success_msg', `Device ${deviceId} deleted successfully`);
+    res.redirect('/admin');
+  } catch(err) {
+    console.error('Delete device error:', err);
+    req.flash('error_msg', 'Failed to delete device');
+    res.redirect('/admin');
+  }
+});
+
+app.post('/admin/device/:deviceId/reset-revenue', isAdmin, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    await db.query(
+      'UPDATE cuepay_devices SET today_revenue = 0, today_games = 0, total_revenue = 0 WHERE device_id = ?',
+      [deviceId]
+    );
+    req.flash('success_msg', `Revenue reset for ${deviceId}`);
+    res.redirect(`/admin/device/${deviceId}`);
+  } catch(err) {
+    req.flash('error_msg', 'Failed to reset revenue');
+    res.redirect('/admin');
+  }
+});
+
+app.get('/admin/users', isAdmin, async (req, res) => {
+  try {
+    const [users] = await db.query(`
+      SELECT u.*,
+        (SELECT COUNT(*) FROM cuepay_devices WHERE owner_id = u.id) as device_count,
+        (SELECT SUM(total_revenue) FROM cuepay_devices WHERE owner_id = u.id) as total_revenue
+      FROM cuepay_users u
+      ORDER BY u.created_at DESC
+    `);
+    res.render('admin/users', {
+      title: 'Users - Admin',
+      users,
+      user: req.session.user
+    });
+  } catch(err) {
+    res.redirect('/admin');
+  }
+});
+
+app.post('/admin/users/:userId/delete', isAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const [devices] = await db.query('SELECT device_id FROM cuepay_devices WHERE owner_id = ?', [userId]);
+    for (const d of devices) {
+      await db.query('DELETE FROM cuepay_payments WHERE device_id = ?', [d.device_id]);
+      await db.query('DELETE FROM cuepay_commands WHERE device_id = ?', [d.device_id]);
+    }
+    await db.query('DELETE FROM cuepay_devices WHERE owner_id = ?', [userId]);
+    await db.query('DELETE FROM cuepay_users WHERE id = ?', [userId]);
+    req.flash('success_msg', 'User deleted');
+    res.redirect('/admin/users');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to delete user');
+    res.redirect('/admin/users');
+  }
+});
+
+app.get('/admin/payments', isAdmin, async (req, res) => {
+  try {
+    const [payments] = await db.query(`
+      SELECT p.*, d.device_name, u.email as owner_email
+      FROM cuepay_payments p
+      LEFT JOIN cuepay_devices d ON p.device_id = d.device_id
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      ORDER BY p.payment_time DESC
+      LIMIT 200
+    `);
+
+    const [totals] = await db.query(`
+      SELECT SUM(amount) as total, COUNT(*) as count
+      FROM cuepay_payments
+    `);
+
+    res.render('admin/payments', {
+      title: 'All Payments - Admin',
+      payments,
+      totals: totals[0],
+      user: req.session.user
+    });
+  } catch(err) {
+    res.redirect('/admin');
+  }
+});
+
+// ============================================
+// ALERT NOTIFICATION SYSTEM
+// ============================================
+setInterval(async () => {
+  try {
+    const [offlineDevices] = await db.query(`
+      SELECT d.*, u.email, u.full_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.status = 'offline'
+        AND d.last_sync IS NOT NULL
+        AND d.last_sync < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    `);
+
+    for (const device of offlineDevices) {
+      const [recentAlerts] = await db.query(
+        `SELECT id FROM cuepay_alert_history
+         WHERE device_id = ? AND alert_type = 'device_offline'
+         AND created_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)`,
         [device.device_id]
       );
 
-      const [weekTotal] = await db.query(
-        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games, COUNT(*) as total_payments
-         FROM cuepay_payments WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
+      if (recentAlerts.length === 0) {
+        if (isBusinessHours() && device.email) {
+          const offlineMinutes = Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000);
+          const emailText = 'Device ' + device.device_name + ' is Offline\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nLocation: ' + (device.location_area || 'N/A') + '\nOffline for: ' + offlineMinutes + ' minutes\nLast Seen: ' + new Date(device.last_sync).toLocaleString() + '\nGames Available: ' + (device.games_available || 0) + '\n\nPlease check:\n- Power supply is connected\n- WiFi is working\n- GSM module is functioning\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
+          await sendEmail(device.email, 'Device ' + device.device_name + ' status update', emailText);
+        }
+
+        await db.query(
+          `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message)
+           VALUES (?, ?, 'device_offline', ?)`,
+          [device.owner_id, device.device_id, 'Device offline for ' + Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000) + ' minutes']
+        );
+      }
+    }
+
+    const [lowGamesDevices] = await db.query(`
+      SELECT d.*, u.email, u.full_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.games_available <= 5 AND d.games_available > 0
+        AND d.status = 'online'
+    `);
+
+    for (const device of lowGamesDevices) {
+      const [recentAlerts] = await db.query(
+        `SELECT id FROM cuepay_alert_history
+         WHERE device_id = ? AND alert_type = 'low_games'
+         AND created_at > DATE_SUB(NOW(), INTERVAL 4 HOUR)`,
         [device.device_id]
       );
 
-      reports.push({ ...device, daily: dailyStats, total: weekTotal[0] });
+      if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
+        const emailText = 'Device ' + device.device_name + ' Low Games Alert\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nGames Remaining: ' + device.games_available + '\nRevenue Today: Ksh ' + (device.today_revenue || 0) + '\n\nAdd games from your dashboard to avoid running out!\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
+        await sendEmail(device.email, 'Device ' + device.device_name + ' low games alert', emailText);
+      }
     }
 
-    res.render('cuepay/reports/weekly', {
-      title: 'Weekly Report - CuePay',
-      reports,
-      user: req.session.cuepayUser
-    });
-  } catch(err) {
-    res.redirect('/cuepay/dashboard');
-  }
-});
+    const [lowBatteryDevices] = await db.query(`
+      SELECT d.*, u.email, u.full_name
+      FROM cuepay_devices d
+      LEFT JOIN cuepay_users u ON d.owner_id = u.id
+      WHERE d.battery_voltage <= 10.5 AND d.battery_voltage > 0
+        AND d.status = 'online'
+    `);
 
-// Monthly Report
-app.get('/cuepay/reports/monthly', isCuePayAuth, async (req, res) => {
-  try {
-    const userId = req.session.cuepayUser.id;
-    const month = req.query.month || new Date().toISOString().substring(0, 7);
-
-    const [devices] = await db.query('SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?', [userId]);
-
-    const reports = [];
-    for (const device of devices) {
-      const [weeklyStats] = await db.query(
-        `SELECT WEEK(payment_time, 1) as week_num,
-                MIN(DATE(payment_time)) as week_start,
-                SUM(amount) as revenue,
-                SUM(games_earned) as games,
-                COUNT(*) as payments
-         FROM cuepay_payments
-         WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?
-         GROUP BY WEEK(payment_time, 1)
-         ORDER BY week_num`,
-        [device.device_id, month]
+    for (const device of lowBatteryDevices) {
+      const [recentAlerts] = await db.query(
+        `SELECT id FROM cuepay_alert_history
+         WHERE device_id = ? AND alert_type = 'low_battery'
+         AND created_at > DATE_SUB(NOW(), INTERVAL 6 HOUR)`,
+        [device.device_id]
       );
 
-      const [monthTotal] = await db.query(
-        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games,
-                COUNT(*) as total_payments, COUNT(DISTINCT customer_number) as total_customers,
-                AVG(amount) as avg_payment
-         FROM cuepay_payments WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
-        [device.device_id, month]
-      );
-
-      // Previous month for growth comparison
-      const prevMonth = month.substring(5) === '01' ?
-        (parseInt(month.substring(0,4)) - 1) + '-12' :
-        month.substring(0,5) + String(parseInt(month.substring(5)) - 1).padStart(2, '0');
-
-      const [prevTotal] = await db.query(
-        `SELECT SUM(amount) as prev_revenue FROM cuepay_payments
-         WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
-        [device.device_id, prevMonth]
-      );
-
-      const growth = prevTotal[0].prev_revenue > 0 ?
-        ((monthTotal[0].total_revenue - prevTotal[0].prev_revenue) / prevTotal[0].prev_revenue * 100) : 0;
-
-      reports.push({ ...device, weekly: weeklyStats, total: monthTotal[0], growth: growth.toFixed(1) });
+      if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
+        const batteryText = 'Device ' + device.device_name + ' Low Battery Warning\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nBattery Voltage: ' + device.battery_voltage + 'V\n\nPlease charge the device soon to avoid interruption.\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
+        await sendEmail(device.email, 'Device ' + device.device_name + ' battery warning', batteryText);
+      }
     }
 
-    res.render('cuepay/reports/monthly', {
-      title: 'Monthly Report - CuePay',
-      reports,
-      selectedMonth: month,
-      user: req.session.cuepayUser
-    });
   } catch(err) {
-    res.redirect('/cuepay/dashboard');
+    console.error('Alert system error:', err.message);
   }
-});
+}, 60000);
 
-// Export CSV
-app.get('/cuepay/export/csv/:deviceId', isCuePayAuth, async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-    const [payments] = await db.query(
-      'SELECT transaction_id, amount, customer_number, games_earned, payment_time FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 1000',
-      [deviceId]
-    );
-
-    let csv = 'Transaction ID,Amount,Customer,Games,Date Time\n';
-    payments.forEach(p => {
-      csv += `${p.transaction_id},${p.amount},${p.customer_number},${p.games_earned},${p.payment_time}\n`;
-    });
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=cuepay_${deviceId}_${new Date().toISOString().split('T')[0]}.csv`);
-    res.send(csv);
-  } catch(err) {
-    res.redirect('/cuepay/dashboard');
+setInterval(async () => {
+  const now = new Date();
+  if (now.getHours() === 0 && now.getMinutes() <= 1) {
+    try {
+      await db.query(`
+        UPDATE cuepay_devices
+        SET today_revenue = 0, today_games = 0
+        WHERE last_sync < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+      `);
+      console.log('Midnight reset: cleared today stats');
+    } catch(err) {
+      console.error('Midnight reset error:', err.message);
+    }
   }
-});
-
-// ===== CUSTOMER ANALYTICS =====
-
-// Top Customers
-app.get('/cuepay/customers/:deviceId', isCuePayAuth, async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-    const [topCustomers] = await db.query(
-      `SELECT customer_number,
-              COUNT(*) as visits,
-              SUM(amount) as total_spent,
-              SUM(games_earned) as total_games,
-              AVG(amount) as avg_spend,
-              MAX(payment_time) as last_visit,
-              MIN(payment_time) as first_visit
-       FROM cuepay_payments
-       WHERE device_id = ? AND customer_number != 'Unknown'
-       GROUP BY customer_number
-       ORDER BY total_spent DESC LIMIT 20`,
-      [deviceId]
-    );
-
-    const retention = await getCustomerRetention(deviceId, 30);
-
-    res.render('cuepay/customers', {
-      title: 'Customer Analytics - CuePay',
-      topCustomers,
-      retention,
-      deviceId,
-      user: req.session.cuepayUser
-    });
-  } catch(err) {
-    res.redirect('/cuepay/dashboard');
-  }
-});
-
-// ===== TABLE PERFORMANCE =====
-
-// Table Comparison
-app.get('/cuepay/compare', isCuePayAuth, async (req, res) => {
-  try {
-    const userId = req.session.cuepayUser.id;
-    const period = req.query.period || '7';
-
-    const [devices] = await db.query(
-      `SELECT d.*,
-        (SELECT SUM(amount) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_revenue,
-        (SELECT SUM(games_earned) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_games,
-        (SELECT COUNT(*) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_payments
-       FROM cuepay_devices d WHERE d.owner_id = ?
-       ORDER BY period_revenue DESC`,
-      [parseInt(period), parseInt(period), userId]
-    );
-
-    res.render('cuepay/compare', {
-      title: 'Table Comparison - CuePay',
-      devices,
-      selectedPeriod: period,
-      user: req.session.cuepayUser
-    });
-  } catch(err) {
-    res.redirect('/cuepay/dashboard');
-  }
-});
-
-// ===== GOALS MANAGEMENT =====
-
-// Set Goal
-app.post('/cuepay/goals', isCuePayAuth, async (req, res) => {
-  try {
-    const { device_id, goal_type, target_revenue, target_games, start_date } = req.body;
-    await db.query(
-      'INSERT INTO cuepay_goals (owner_id, device_id, goal_type, target_revenue, target_games, start_date) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.session.cuepayUser.id, device_id || null, goal_type, target_revenue, target_games || null, start_date]
-    );
-    req.flash('success_msg', 'Goal set successfully!');
-    res.redirect('/cuepay/dashboard');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to set goal');
-    res.redirect('/cuepay/dashboard');
-  }
-});
-
-// ===== STAFF MANAGEMENT =====
-
-// Staff List
-app.get('/cuepay/staff', isCuePayAuth, async (req, res) => {
-  try {
-    const [staff] = await db.query('SELECT * FROM cuepay_staff WHERE owner_id = ? ORDER BY full_name', [req.session.cuepayUser.id]);
-    res.render('cuepay/staff', { title: 'Staff Management - CuePay', staff, user: req.session.cuepayUser });
-  } catch(err) {
-    res.redirect('/cuepay/dashboard');
-  }
-});
-
-// Add Staff
-app.post('/cuepay/staff', isCuePayAuth, async (req, res) => {
-  try {
-    const { full_name, email, phone, pin_code, role, commission_percent } = req.body;
-    await db.query(
-      'INSERT INTO cuepay_staff (owner_id, full_name, email, phone, pin_code, role, commission_percent) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.session.cuepayUser.id, full_name, email, phone, pin_code, role, commission_percent || 0]
-    );
-    req.flash('success_msg', 'Staff added!');
-    res.redirect('/cuepay/staff');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to add staff');
-    res.redirect('/cuepay/staff');
-  }
-});
-
-// ===== ALERTS =====
-
-// Alert Settings
-app.get('/cuepay/alerts', isCuePayAuth, async (req, res) => {
-  try {
-    const [alerts] = await db.query('SELECT * FROM cuepay_alerts WHERE owner_id = ?', [req.session.cuepayUser.id]);
-    const [history] = await db.query(
-      'SELECT * FROM cuepay_alert_history WHERE owner_id = ? ORDER BY created_at DESC LIMIT 20',
-      [req.session.cuepayUser.id]
-    );
-    res.render('cuepay/alerts', { title: 'Alert Settings - CuePay', alerts, history, user: req.session.cuepayUser });
-  } catch(err) {
-    res.redirect('/cuepay/dashboard');
-  }
-});
-
-// Toggle Alert
-app.post('/cuepay/alerts/toggle/:id', isCuePayAuth, async (req, res) => {
-  await db.query('UPDATE cuepay_alerts SET is_enabled = NOT is_enabled WHERE id = ? AND owner_id = ?', [req.params.id, req.session.cuepayUser.id]);
-  res.redirect('/cuepay/alerts');
-});
-
+}, 60000);
 
 // ============================================
-// SPINSPRING LAUNDRY AUTOMATION SYSTEM
+// PROJECT REVIEWS
+// ============================================
+db.query(`CREATE TABLE IF NOT EXISTS project_reviews (
+  id int NOT NULL AUTO_INCREMENT,
+  name varchar(100) NOT NULL,
+  project varchar(100) NOT NULL,
+  rating tinyint NOT NULL,
+  comment text NOT NULL,
+  created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch(() => {});
+
+app.post('/projects/review', async (req, res) => {
+  try {
+    const { name, project, rating, comment } = req.body;
+    await db.query(
+      'INSERT INTO project_reviews (name, project, rating, comment) VALUES (?, ?, ?, ?)',
+      [name, project, parseInt(rating), comment]
+    );
+    req.flash('success_msg', 'Review submitted! Thank you for your feedback.');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to submit review');
+  }
+  res.redirect('/projects');
+});
+
+// ============================================
+// HEALTH MONITORING SYSTEM
+// ============================================
+app.get('/health', async (req, res) => {
+  try {
+    const [readings] = await db.query(
+      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 50'
+    );
+
+    const [latest] = await db.query(
+      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 1'
+    );
+
+    const [stats] = await db.query(
+      `SELECT
+        AVG(spo2) as avg_spo2,
+        AVG(temperature) as avg_temp,
+        AVG(heart_rate) as avg_hr,
+        MIN(heart_rate) as min_hr,
+        MAX(heart_rate) as max_hr,
+        COUNT(*) as total_readings
+       FROM health_readings
+       WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
+    );
+
+    res.render('health', {
+      title: 'Health Monitoring - Ardthon Solutions',
+      readings,
+      latest: latest[0] || null,
+      stats: stats[0] || {},
+      user: req.session.user || null
+    });
+  } catch(err) {
+    console.error('Health page error:', err);
+    res.render('health', {
+      title: 'Health Monitoring',
+      readings: [],
+      latest: null,
+      stats: {},
+      user: req.session.user || null
+    });
+  }
+});
+
+app.post('/health/api/submit', async (req, res) => {
+  try {
+    const { device_id, spo2, temperature, heart_rate } = req.body;
+
+    if (!device_id) {
+      return res.status(400).json({ error: 'device_id required' });
+    }
+
+    await db.query(
+      'INSERT INTO health_readings (device_id, spo2, temperature, heart_rate) VALUES (?, ?, ?, ?)',
+      [device_id, parseFloat(spo2) || 0, parseFloat(temperature) || 0, parseInt(heart_rate) || 0]
+    );
+
+    res.json({ status: 'success', message: 'Reading recorded' });
+  } catch(err) {
+    console.error('Health API error:', err);
+    res.status(500).json({ error: 'Failed to save reading' });
+  }
+});
+
+app.get('/health/api/latest', async (req, res) => {
+  try {
+    const [latest] = await db.query(
+      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 1'
+    );
+
+    const [recent] = await db.query(
+      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 20'
+    );
+
+    const [stats] = await db.query(
+      `SELECT
+        AVG(spo2) as avg_spo2,
+        AVG(temperature) as avg_temp,
+        AVG(heart_rate) as avg_hr,
+        MIN(heart_rate) as min_hr,
+        MAX(heart_rate) as max_hr
+       FROM health_readings
+       WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
+    );
+
+    res.json({
+      latest: latest[0] || null,
+      recent: recent.reverse(),
+      stats: stats[0] || {}
+    });
+  } catch(err) {
+    res.status(500).json({ error: 'Failed to get data' });
+  }
+});
+
+// ============================================
+// PUSH NOTIFICATIONS
+// ============================================
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const subscription = req.body;
+    const userId = req.session.cuepayUser ? req.session.cuepayUser.id : null;
+
+    await db.query(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id int NOT NULL AUTO_INCREMENT,
+      user_id int,
+      subscription json NOT NULL,
+      created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+    await db.query('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)',
+      [userId, JSON.stringify(subscription)]);
+
+    res.json({ success: true });
+  } catch(err) {
+    res.status(500).json({ error: 'Failed to subscribe' });
+  }
+});
+
+// ============================================
+// SPINSPRING LAUNDRY AUTOMATION SYSTEM (Multi-Role)
 // ============================================
 
 const spinspgCrypto = require('crypto');
@@ -2437,6 +1892,22 @@ async function validateSpinApiKey(req, res, next) {
   }
 }
 
+function generateCustomerId() {
+  return 'CUST-' + Date.now().toString(36).toUpperCase().slice(-4) + '-' + Math.random().toString(36).toUpperCase().slice(-4);
+}
+
+function isSpinOwner(req, res, next) {
+  if (req.session.spinUser && req.session.spinUser.role === 'owner') return next();
+  req.flash('error_msg', 'Owner access required');
+  res.redirect('/spinspg/dashboard');
+}
+
+function isSpinAttendant(req, res, next) {
+  if (req.session.spinUser && (req.session.spinUser.role === 'attendant' || req.session.spinUser.role === 'owner')) return next();
+  req.flash('error_msg', 'Access denied');
+  res.redirect('/spinspg/login');
+}
+
 // SpinSpring Pages
 app.get('/spinspg/login', (req, res) => {
   if (req.session.spinUser) return res.redirect('/spinspg/dashboard');
@@ -2468,7 +1939,6 @@ app.post('/spinspg/login', async (req, res) => {
       role: users[0].role || 'owner'
     };
     
-    // Redirect based on role
     if (users[0].role === 'owner') {
       res.redirect('/spinspg/owner');
     } else if (users[0].role === 'attendant') {
@@ -2482,7 +1952,6 @@ app.post('/spinspg/login', async (req, res) => {
     res.redirect('/spinspg/login');
   }
 });
-
 
 app.get('/spinspg/register', (req, res) => {
   res.render('spinspring/register', { title: 'SpinSpring Register' });
@@ -2498,8 +1967,8 @@ app.post('/spinspg/register', async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 10);
     await db.query(
-      'INSERT INTO spinspg_users (email, password, full_name, business_name, phone) VALUES (?, ?, ?, ?, ?)',
-      [email, hash, full_name, business_name, phone]
+      'INSERT INTO spinspg_users (email, password, full_name, business_name, phone, role) VALUES (?, ?, ?, ?, ?, ?)',
+      [email, hash, full_name, business_name, phone, 'owner']
     );
     req.flash('success_msg', 'Account created! Login now.');
     res.redirect('/spinspg/login');
@@ -2514,7 +1983,6 @@ app.get('/spinspg/logout', (req, res) => {
   res.redirect('/spinspg/login');
 });
 
-// Dashboard
 app.get('/spinspg/dashboard', isSpinAuth, async (req, res) => {
   try {
     const userId = req.session.spinUser.id;
@@ -2542,7 +2010,6 @@ app.get('/spinspg/dashboard', isSpinAuth, async (req, res) => {
   }
 });
 
-// Register Device
 app.get('/spinspg/register-device', isSpinAuth, (req, res) => {
   res.render('spinspring/register-device', { title: 'Register Device - SpinSpring' });
 });
@@ -2573,7 +2040,6 @@ app.get('/spinspg/device-credentials', isSpinAuth, (req, res) => {
   res.render('spinspring/device-credentials', { title: 'Device Credentials', device });
 });
 
-// Device Detail
 app.get('/spinspg/device/:deviceId', isSpinAuth, async (req, res) => {
   try {
     const userId = req.session.spinUser.id;
@@ -2605,7 +2071,6 @@ app.get('/spinspg/device/:deviceId', isSpinAuth, async (req, res) => {
   }
 });
 
-// Orders
 app.get('/spinspg/orders', isSpinAuth, async (req, res) => {
   const userId = req.session.spinUser.id;
   const [orders] = await db.query(
@@ -2615,7 +2080,6 @@ app.get('/spinspg/orders', isSpinAuth, async (req, res) => {
   res.render('spinspring/orders', { title: 'Orders - SpinSpring', orders });
 });
 
-// Send Command
 app.post('/spinspg/device/:deviceId/command', isSpinAuth, async (req, res) => {
   try {
     const { command_type, command_value } = req.body;
@@ -2640,7 +2104,252 @@ app.post('/spinspg/device/:deviceId/command', isSpinAuth, async (req, res) => {
   }
 });
 
-// API: Sync
+// ============================================
+// SPINSPRING MULTI-ROLE SYSTEM
+// ============================================
+
+app.get('/spinspg/owner', isSpinOwner, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [userId]);
+    const [attendants] = await db.query('SELECT * FROM spinspg_attendants WHERE owner_id = ?', [userId]);
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ?', [userId]);
+    const [stats] = await db.query(
+      'SELECT SUM(today_revenue) as today_rev, SUM(total_revenue) as total_rev, SUM(cycles_completed) as total_cyc FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    res.render('spinspring/owner-dashboard', {
+      title: 'Owner Panel - SpinSpring',
+      devices, attendants, customers, stats: stats[0],
+      user: req.session.spinUser
+    });
+  } catch(err) {
+    res.render('spinspring/owner-dashboard', { title: 'Owner Panel', devices: [], attendants: [], customers: [], stats: {}, user: req.session.spinUser });
+  }
+});
+
+app.post('/spinspg/owner/attendants', isSpinOwner, async (req, res) => {
+  try {
+    const { full_name, email, phone, pin_code, device_access } = req.body;
+    const ownerId = req.session.spinUser.id;
+    
+    const [existing] = await db.query('SELECT id FROM spinspg_attendants WHERE email = ? AND owner_id = ?', [email, ownerId]);
+    if (existing.length > 0) {
+      req.flash('error_msg', 'Attendant email already exists');
+      return res.redirect('/spinspg/owner');
+    }
+    
+    await db.query(
+      'INSERT INTO spinspg_attendants (owner_id, full_name, email, phone, pin_code, device_access) VALUES (?, ?, ?, ?, ?, ?)',
+      [ownerId, full_name, email, phone, pin_code, JSON.stringify(device_access || [])]
+    );
+    req.flash('success_msg', 'Attendant created!');
+    res.redirect('/spinspg/owner');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to create attendant');
+    res.redirect('/spinspg/owner');
+  }
+});
+
+app.post('/spinspg/owner/attendants/:id/toggle', isSpinOwner, async (req, res) => {
+  await db.query('UPDATE spinspg_attendants SET is_active = NOT is_active WHERE id = ? AND owner_id = ?', [req.params.id, req.session.spinUser.id]);
+  res.redirect('/spinspg/owner');
+});
+
+app.post('/spinspg/owner/attendants/:id/delete', isSpinOwner, async (req, res) => {
+  await db.query('DELETE FROM spinspg_attendants WHERE id = ? AND owner_id = ?', [req.params.id, req.session.spinUser.id]);
+  req.flash('success_msg', 'Attendant deleted');
+  res.redirect('/spinspg/owner');
+});
+
+app.post('/spinspg/owner/customers', isSpinOwner, async (req, res) => {
+  try {
+    const { full_name, phone, email } = req.body;
+    const ownerId = req.session.spinUser.id;
+    const customerId = generateCustomerId();
+    
+    if (email) {
+      const [existing] = await db.query('SELECT id FROM spinspg_customers WHERE email = ? AND owner_id = ?', [email, ownerId]);
+      if (existing.length > 0) {
+        req.flash('error_msg', 'Customer email already exists');
+        return res.redirect('/spinspg/owner');
+      }
+    }
+    
+    await db.query(
+      'INSERT INTO spinspg_customers (owner_id, customer_unique_id, full_name, phone, email) VALUES (?, ?, ?, ?, ?)',
+      [ownerId, customerId, full_name, phone, email || null]
+    );
+    req.flash('success_msg', 'Customer created with ID: ' + customerId);
+    res.redirect('/spinspg/owner');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to create customer');
+    res.redirect('/spinspg/owner');
+  }
+});
+
+// Attendant Panel
+app.get('/spinspg/attendant-login', (req, res) => {
+  res.render('spinspring/attendant-login', { title: 'Attendant Login - SpinSpring' });
+});
+
+app.post('/spinspg/attendant-login', async (req, res) => {
+  try {
+    const { email, pin_code } = req.body;
+    const [attendants] = await db.query(
+      'SELECT a.*, u.business_name, u.full_name as owner_name FROM spinspg_attendants a LEFT JOIN spinspg_users u ON a.owner_id = u.id WHERE a.email = ? AND a.pin_code = ? AND a.is_active = 1',
+      [email, pin_code]
+    );
+    
+    if (attendants.length === 0) {
+      req.flash('error_msg', 'Invalid attendant credentials');
+      return res.redirect('/spinspg/attendant-login');
+    }
+    
+    const attendant = attendants[0];
+    req.session.spinUser = {
+      id: attendant.id,
+      email: attendant.email,
+      name: attendant.full_name,
+      business: attendant.business_name,
+      role: 'attendant',
+      ownerId: attendant.owner_id,
+      deviceAccess: Array.isArray(attendant.device_access) ? attendant.device_access : (typeof attendant.device_access === 'string' ? JSON.parse(attendant.device_access) : [])
+    };
+    
+    res.redirect('/spinspg/attendant');
+  } catch(err) {
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/spinspg/attendant-login');
+  }
+});
+
+app.get('/spinspg/attendant', isSpinAttendant, async (req, res) => {
+  try {
+    const ownerId = req.session.spinUser.ownerId;
+    const deviceAccess = req.session.spinUser.deviceAccess || [];
+    
+    let devices;
+    if (deviceAccess.length > 0) {
+      const [result] = await db.query(
+        'SELECT * FROM spinspg_devices WHERE owner_id = ? AND device_id IN (?)',
+        [ownerId, deviceAccess]
+      );
+      devices = result;
+    } else {
+      const [result] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [ownerId]);
+      devices = result;
+    }
+    
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ? AND is_active = 1', [ownerId]);
+    const [activeOrders] = await db.query(
+      "SELECT o.*, d.device_name FROM spinspg_orders o LEFT JOIN spinspg_devices d ON o.device_id = d.device_id WHERE o.user_id = ? AND o.order_status IN ('queued', 'in_progress') ORDER BY o.created_at DESC",
+      [ownerId]
+    );
+    
+    res.render('spinspring/attendant-dashboard', {
+      title: 'Attendant Panel - SpinSpring',
+      devices, customers, activeOrders,
+      user: req.session.spinUser
+    });
+  } catch(err) {
+    res.render('spinspring/attendant-dashboard', {
+      title: 'Attendant Panel', 
+      devices: [], customers: [], activeOrders: [],
+      user: req.session.spinUser
+    });
+  }
+});
+
+// Customer Panel
+app.get('/spinspg/customer-login', (req, res) => {
+  res.render('spinspring/customer-login', { title: 'Customer Login - SpinSpring' });
+});
+
+app.post('/spinspg/customer-login', async (req, res) => {
+  try {
+    const { customer_id } = req.body;
+    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ? AND is_active = 1', [customer_id]);
+    
+    if (customers.length === 0) {
+      req.flash('error_msg', 'Invalid customer ID');
+      return res.redirect('/spinspg/customer-login');
+    }
+    
+    const customer = customers[0];
+    req.session.spinUser = {
+      id: customer.id,
+      name: customer.full_name,
+      customerId: customer.customer_unique_id,
+      role: 'customer',
+      ownerId: customer.owner_id
+    };
+    
+    res.redirect('/spinspg/customer');
+  } catch(err) {
+    req.flash('error_msg', 'Login failed');
+    res.redirect('/spinspg/customer-login');
+  }
+});
+
+app.get('/spinspg/customer', async (req, res) => {
+  if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
+    return res.redirect('/spinspg/customer-login');
+  }
+  
+  const customerId = req.session.spinUser.customerId;
+  const [customerData] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ?', [customerId]);
+  const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE customer_name = ? ORDER BY created_at DESC LIMIT 20', [customerId]);
+  const [activeOrders] = await db.query(
+    "SELECT * FROM spinspg_orders WHERE customer_name = ? AND order_status IN ('queued', 'in_progress') ORDER BY created_at DESC",
+    [customerId]
+  );
+  
+  res.render('spinspring/customer-dashboard', {
+    title: 'My Account - SpinSpring',
+    customer: customerData[0],
+    orders, activeOrders,
+    user: req.session.spinUser
+  });
+});
+
+app.get('/spinspg/api/customer-orders', async (req, res) => {
+  if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
+    return res.json({ success: false });
+  }
+  const customerId = req.session.spinUser.customerId;
+  const [activeOrders] = await db.query(
+    "SELECT * FROM spinspg_orders WHERE customer_name = ? AND order_status IN ('queued', 'in_progress') ORDER BY created_at DESC",
+    [customerId]
+  );
+  res.json({ success: true, activeOrders });
+});
+
+app.post('/spinspg/attendant/orders', isSpinAttendant, async (req, res) => {
+  try {
+    const { device_id, customer_id, service_type, cycle_type, price, payment_status } = req.body;
+    const orderNumber = 'SS-' + Date.now().toString(36).toUpperCase();
+    
+    await db.query(
+      'INSERT INTO spinspg_orders (order_number, device_id, user_id, customer_name, service_type, cycle_type, price, payment_status, order_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [orderNumber, device_id, req.session.spinUser.ownerId, customer_id, service_type, cycle_type, price, payment_status, 'queued']
+    );
+    
+    await db.query('UPDATE spinspg_customers SET total_cycles = total_cycles + 1, total_spent = total_spent + ?, loyalty_points = loyalty_points + FLOOR(?/100) WHERE customer_unique_id = ?',
+      [price, price, customer_id]);
+    
+    req.flash('success_msg', 'Order created: ' + orderNumber);
+    res.redirect('/spinspg/attendant');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to create order');
+    res.redirect('/spinspg/attendant');
+  }
+});
+
+// ============================================
+// SPINSPRING API SYNC & PAYMENT INTEGRATION
+// ============================================
+
 app.post('/spinspg/api/sync', validateSpinApiKey, async (req, res) => {
   try {
     const device = req.spinDevice;
@@ -2699,7 +2408,6 @@ app.post('/spinspg/api/sync', validateSpinApiKey, async (req, res) => {
   }
 });
 
-// API: Time
 app.get('/spinspg/api/time', (req, res) => {
   const now = new Date();
   res.json({
@@ -2709,8 +2417,6 @@ app.get('/spinspg/api/time', (req, res) => {
   });
 });
 
-
-// SpinSpring Reports
 app.get('/spinspg/reports', isSpinAuth, async (req, res) => {
   try {
     const userId = req.session.spinUser.id;
@@ -2729,7 +2435,6 @@ app.get('/spinspg/reports', isSpinAuth, async (req, res) => {
   }
 });
 
-// Order Detail
 app.get('/spinspg/order/:orderId', isSpinAuth, async (req, res) => {
   try {
     const [orders] = await db.query(
@@ -2746,7 +2451,6 @@ app.get('/spinspg/order/:orderId', isSpinAuth, async (req, res) => {
   }
 });
 
-// SpinSpring Settings
 app.get('/spinspg/settings', isSpinAuth, (req, res) => {
   res.render('spinspring/settings', {
     title: 'Settings - SpinSpring',
@@ -2767,7 +2471,6 @@ app.post('/spinspg/settings/business', isSpinAuth, async (req, res) => {
   res.redirect('/spinspg/settings');
 });
 
-// SpinSpring API for dashboard refresh
 app.get('/spinspg/api/dashboard-data', isSpinAuth, async (req, res) => {
   try {
     const userId = req.session.spinUser.id;
@@ -2781,367 +2484,997 @@ app.get('/spinspg/api/dashboard-data', isSpinAuth, async (req, res) => {
   }
 });
 
-
 // ============================================
-// SPINSPRING MULTI-ROLE SYSTEM
+// SPINSPRING PAYMENT INTEGRATION
 // ============================================
 
-// Helper: Generate customer ID
-function generateCustomerId() {
-  return 'CUST-' + Date.now().toString(36).toUpperCase().slice(-4) + '-' + Math.random().toString(36).toUpperCase().slice(-4);
-}
-
-// Helper: Check if owner
-function isSpinOwner(req, res, next) {
-  if (req.session.spinUser && req.session.spinUser.role === 'owner') return next();
-  req.flash('error_msg', 'Owner access required');
-  res.redirect('/spinspg/dashboard');
-}
-
-// Helper: Check if attendant
-function isSpinAttendant(req, res, next) {
-  if (req.session.spinUser && (req.session.spinUser.role === 'attendant' || req.session.spinUser.role === 'owner')) return next();
-  req.flash('error_msg', 'Access denied');
-  res.redirect('/spinspg/login');
-}
-
-// ===== OWNER PANEL =====
-
-// Owner Dashboard (Full access)
-app.get('/spinspg/owner', isSpinOwner, async (req, res) => {
+app.post('/spinspg/api/payment', validateSpinApiKey, async (req, res) => {
   try {
-    const userId = req.session.spinUser.id;
-    const [devices] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [userId]);
-    const [attendants] = await db.query('SELECT * FROM spinspg_attendants WHERE owner_id = ?', [userId]);
-    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ?', [userId]);
-    const [stats] = await db.query(
-      'SELECT SUM(today_revenue) as today_rev, SUM(total_revenue) as total_rev, SUM(cycles_completed) as total_cyc FROM spinspg_devices WHERE owner_id = ?',
-      [userId]
-    );
-    res.render('spinspring/owner-dashboard', {
-      title: 'Owner Panel - SpinSpring',
-      devices, attendants, customers, stats: stats[0],
-      user: req.session.spinUser
-    });
-  } catch(err) {
-    res.render('spinspring/owner-dashboard', { title: 'Owner Panel', devices: [], attendants: [], customers: [], stats: {}, user: req.session.spinUser });
-  }
-});
-
-// Create Attendant
-app.post('/spinspg/owner/attendants', isSpinOwner, async (req, res) => {
-  try {
-    const { full_name, email, phone, pin_code, device_access } = req.body;
-    const ownerId = req.session.spinUser.id;
-    
-    // Check duplicate email
-    const [existing] = await db.query('SELECT id FROM spinspg_attendants WHERE email = ? AND owner_id = ?', [email, ownerId]);
-    if (existing.length > 0) {
-      req.flash('error_msg', 'Attendant email already exists');
-      return res.redirect('/spinspg/owner');
-    }
+    const device = req.spinDevice;
+    const { transaction_id, amount, customer_number, order_number } = req.body;
     
     await db.query(
-      'INSERT INTO spinspg_attendants (owner_id, full_name, email, phone, pin_code, device_access) VALUES (?, ?, ?, ?, ?, ?)',
-      [ownerId, full_name, email, phone, pin_code, JSON.stringify(device_access || [])]
+      'INSERT INTO spinspg_payments (device_id, order_number, transaction_id, amount, customer_number) VALUES (?, ?, ?, ?, ?)',
+      [device.device_id, order_number, transaction_id, amount, customer_number]
     );
-    req.flash('success_msg', 'Attendant created!');
-    res.redirect('/spinspg/owner');
+    
+    await db.query(
+      'UPDATE spinspg_devices SET today_revenue = today_revenue + ?, total_revenue = total_revenue + ? WHERE device_id = ?',
+      [amount, amount, device.device_id]
+    );
+    
+    if (order_number) {
+      await db.query(
+        "UPDATE spinspg_orders SET payment_status = 'paid', order_status = 'in_progress', start_time = NOW() WHERE order_number = ?",
+        [order_number]
+      );
+    }
+    
+    res.json({ success: true, message: 'Payment recorded' });
   } catch(err) {
-    req.flash('error_msg', 'Failed to create attendant');
-    res.redirect('/spinspg/owner');
+    res.status(500).json({ error: 'Payment processing failed' });
   }
 });
 
-// Toggle Attendant Active
-app.post('/spinspg/owner/attendants/:id/toggle', isSpinOwner, async (req, res) => {
-  await db.query('UPDATE spinspg_attendants SET is_active = NOT is_active WHERE id = ? AND owner_id = ?', [req.params.id, req.session.spinUser.id]);
-  res.redirect('/spinspg/owner');
+app.get('/spinspg/api/payments/:deviceId', isSpinAuth, async (req, res) => {
+  const [payments] = await db.query(
+    'SELECT * FROM spinspg_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
+    [req.params.deviceId]
+  );
+  res.json({ success: true, payments });
 });
 
-// Delete Attendant
-app.post('/spinspg/owner/attendants/:id/delete', isSpinOwner, async (req, res) => {
-  await db.query('DELETE FROM spinspg_attendants WHERE id = ? AND owner_id = ?', [req.params.id, req.session.spinUser.id]);
-  req.flash('success_msg', 'Attendant deleted');
-  res.redirect('/spinspg/owner');
-});
+// ============================================
+// ORDER LIFECYCLE MANAGEMENT
+// ============================================
 
-// Create Customer
-app.post('/spinspg/owner/customers', isSpinOwner, async (req, res) => {
+app.post('/spinspg/order/:orderId/status', isSpinAuth, async (req, res) => {
   try {
-    const { full_name, phone, email } = req.body;
-    const ownerId = req.session.spinUser.id;
-    const customerId = generateCustomerId();
+    const { status } = req.body;
+    const orderId = req.params.orderId;
     
-    // Check duplicate email if provided
-    if (email) {
-      const [existing] = await db.query('SELECT id FROM spinspg_customers WHERE email = ? AND owner_id = ?', [email, ownerId]);
-      if (existing.length > 0) {
-        req.flash('error_msg', 'Customer email already exists');
-        return res.redirect('/spinspg/owner');
+    if (status === 'in_progress') {
+      await db.query(
+        "UPDATE spinspg_orders SET order_status = 'in_progress', start_time = NOW() WHERE id = ?",
+        [orderId]
+      );
+    } else if (status === 'completed') {
+      await db.query(
+        "UPDATE spinspg_orders SET order_status = 'completed', end_time = NOW() WHERE id = ?",
+        [orderId]
+      );
+      
+      const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE id = ?', [orderId]);
+      if (orders.length > 0) {
+        const order = orders[0];
+        const [customers] = await db.query(
+          'SELECT * FROM spinspg_customers WHERE customer_unique_id = ?',
+          [order.customer_name]
+        );
+        
+        if (customers.length > 0 && customers[0].email) {
+          await sendEmail(
+            customers[0].email,
+            'Your laundry is ready!',
+            'Your order ' + order.order_number + ' is complete. Please collect your laundry.\n\nService: ' + order.service_type + '\nPrice: Ksh ' + order.price + '\n\nThank you for using SpinSpring!'
+          );
+        }
+      }
+    } else if (status === 'cancelled') {
+      await db.query(
+        "UPDATE spinspg_orders SET order_status = 'cancelled' WHERE id = ?",
+        [orderId]
+      );
+    }
+    
+    req.flash('success_msg', 'Order status updated to ' + status);
+    res.redirect('/spinspg/orders');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update order');
+    res.redirect('/spinspg/orders');
+  }
+});
+
+setInterval(async () => {
+  try {
+    await db.query(`
+      UPDATE spinspg_orders o
+      JOIN spinspg_devices d ON o.device_id = d.device_id
+      SET o.order_status = 'completed', o.end_time = NOW()
+      WHERE o.order_status = 'in_progress' AND d.status = 'idle'
+    `);
+  } catch(err) {}
+}, 60000);
+
+// ============================================
+// EMAIL NOTIFICATIONS
+// ============================================
+
+app.get('/spinspg/settings/notifications', isSpinAuth, async (req, res) => {
+  const userId = req.session.spinUser.id;
+  const [settings] = await db.query(
+    'SELECT * FROM spinspg_notification_settings WHERE user_id = ?',
+    [userId]
+  );
+  res.json({ success: true, settings: settings[0] || {} });
+});
+
+app.post('/spinspg/settings/notifications', isSpinAuth, async (req, res) => {
+  const userId = req.session.spinUser.id;
+  const { emailAlerts, lowRevenue, maintenance } = req.body;
+  
+  await db.query(`
+    INSERT INTO spinspg_notification_settings (user_id, email_alerts, low_revenue, maintenance)
+    VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE email_alerts = ?, low_revenue = ?, maintenance = ?
+  `, [userId, emailAlerts, lowRevenue, maintenance, emailAlerts, lowRevenue, maintenance]);
+  
+  res.json({ success: true });
+});
+
+setInterval(async () => {
+  try {
+    const [completedOrders] = await db.query(`
+      SELECT o.*, c.email as customer_email, c.full_name as customer_name
+      FROM spinspg_orders o
+      LEFT JOIN spinspg_customers c ON o.customer_name = c.customer_unique_id
+      WHERE o.order_status = 'completed' 
+        AND o.end_time > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        AND c.email IS NOT NULL
+    `);
+    
+    for (const order of completedOrders) {
+      await sendEmail(
+        order.customer_email,
+        'Your laundry is ready for pickup!',
+        'Hello ' + (order.customer_name || 'Customer') + ',\n\nYour order ' + order.order_number + ' is complete.\n\nService: ' + order.service_type.replace('_', ' → ') + '\nCycle: ' + order.cycle_type + '\nPrice: Ksh ' + order.price + '\n\nPlease collect your laundry. Thank you for using SpinSpring!'
+      );
+    }
+  } catch(err) {}
+}, 300000);
+
+setInterval(async () => {
+  try {
+    const [lowRevenue] = await db.query(`
+      SELECT d.*, u.email
+      FROM spinspg_devices d
+      LEFT JOIN spinspg_users u ON d.owner_id = u.id
+      WHERE d.today_revenue < 500 AND d.status = 'online'
+        AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    `);
+    
+    for (const device of lowRevenue) {
+      if (device.email && isBusinessHours()) {
+        await sendEmail(
+          device.email,
+          'Low revenue alert for ' + device.device_name,
+          device.device_name + ' has only made Ksh ' + device.today_revenue + ' today.\n\nCheck your machine: https://ardthonsolutions.com/spinspg/device/' + device.device_id
+        );
       }
     }
+  } catch(err) {}
+}, 3600000);
+
+// ============================================
+// SETTINGS ROUTES
+// ============================================
+
+app.post('/spinspg/settings/business', isSpinAuth, async (req, res) => {
+  try {
+    const { business_name, phone } = req.body;
+    const userId = req.session.spinUser.id;
     
     await db.query(
-      'INSERT INTO spinspg_customers (owner_id, customer_unique_id, full_name, phone, email) VALUES (?, ?, ?, ?, ?)',
-      [ownerId, customerId, full_name, phone, email || null]
-    );
-    req.flash('success_msg', 'Customer created with ID: ' + customerId);
-    res.redirect('/spinspg/owner');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to create customer');
-    res.redirect('/spinspg/owner');
-  }
-});
-
-// ===== ATTENDANT PANEL =====
-
-// Attendant Login
-app.get('/spinspg/attendant-login', (req, res) => {
-  res.render('spinspring/attendant-login', { title: 'Attendant Login - SpinSpring' });
-});
-
-app.post('/spinspg/attendant-login', async (req, res) => {
-  try {
-    const { email, pin_code } = req.body;
-    const [attendants] = await db.query(
-      'SELECT a.*, u.business_name, u.full_name as owner_name FROM spinspg_attendants a LEFT JOIN spinspg_users u ON a.owner_id = u.id WHERE a.email = ? AND a.pin_code = ? AND a.is_active = 1',
-      [email, pin_code]
+      'UPDATE spinspg_users SET business_name = ?, phone = ? WHERE id = ?',
+      [business_name, phone, userId]
     );
     
-    if (attendants.length === 0) {
-      req.flash('error_msg', 'Invalid attendant credentials');
-      return res.redirect('/spinspg/attendant-login');
+    req.session.spinUser.business = business_name;
+    req.flash('success_msg', 'Business info updated!');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update business info');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+app.post('/spinspg/settings/password', isSpinAuth, async (req, res) => {
+  try {
+    const { current_password, new_password, confirm_password } = req.body;
+    const bcrypt = require('bcryptjs');
+    const userId = req.session.spinUser.id;
+    
+    if (new_password !== confirm_password) {
+      req.flash('error_msg', 'New passwords do not match');
+      return res.redirect('/spinspg/settings');
     }
     
-    const attendant = attendants[0];
-    req.session.spinUser = {
-      id: attendant.id,
-      email: attendant.email,
-      name: attendant.full_name,
-      business: attendant.business_name,
-      role: 'attendant',
-      ownerId: attendant.owner_id,
-      deviceAccess: Array.isArray(attendant.device_access) ? attendant.device_access : (typeof attendant.device_access === 'string' ? JSON.parse(attendant.device_access) : [])
-    };
+    const [users] = await db.query('SELECT password FROM spinspg_users WHERE id = ?', [userId]);
+    const match = await bcrypt.compare(current_password, users[0].password);
     
-    res.redirect('/spinspg/attendant');
-  } catch(err) {
-    req.flash('error_msg', 'Login failed');
-    res.redirect('/spinspg/attendant-login');
-  }
-});
-
-// Attendant Dashboard
-app.get('/spinspg/attendant', isSpinAttendant, async (req, res) => {
-  try {
-    const ownerId = req.session.spinUser.ownerId;
-    const deviceAccess = req.session.spinUser.deviceAccess || [];
-    
-    let devices;
-    if (deviceAccess.length > 0) {
-      const [result] = await db.query(
-        'SELECT * FROM spinspg_devices WHERE owner_id = ? AND device_id IN (?)',
-        [ownerId, deviceAccess]
-      );
-      devices = result;
-    } else {
-      const [result] = await db.query('SELECT * FROM spinspg_devices WHERE owner_id = ?', [ownerId]);
-      devices = result;
+    if (!match) {
+      req.flash('error_msg', 'Current password is incorrect');
+      return res.redirect('/spinspg/settings');
     }
     
-    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE owner_id = ? AND is_active = 1', [ownerId]);
+    const hash = await bcrypt.hash(new_password, 10);
+    await db.query('UPDATE spinspg_users SET password = ? WHERE id = ?', [hash, userId]);
     
-    // ADD THIS: Get active orders
-    const [activeOrders] = await db.query(
-      "SELECT o.*, d.device_name FROM spinspg_orders o LEFT JOIN spinspg_devices d ON o.device_id = d.device_id WHERE o.user_id = ? AND o.order_status IN ('queued', 'in_progress') ORDER BY o.created_at DESC",
-      [ownerId]
+    req.flash('success_msg', 'Password changed successfully!');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to change password');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+app.post('/spinspg/settings/defaults', isSpinAuth, async (req, res) => {
+  try {
+    const { default_price, default_cycle } = req.body;
+    const userId = req.session.spinUser.id;
+    
+    await db.query(
+      'UPDATE spinspg_devices SET price_per_cycle = ? WHERE owner_id = ?',
+      [default_price, userId]
     );
     
-    res.render('spinspring/attendant-dashboard', {
-      title: 'Attendant Panel - SpinSpring',
-      devices, customers, activeOrders,
-      user: req.session.spinUser
-    });
+    req.flash('success_msg', 'Default settings updated!');
   } catch(err) {
-    res.render('spinspring/attendant-dashboard', {
-      title: 'Attendant Panel', 
-      devices: [], customers: [], activeOrders: [],
-      user: req.session.spinUser
+    req.flash('error_msg', 'Failed to update defaults');
+  }
+  res.redirect('/spinspg/settings');
+});
+
+// ============================================
+// REPORTS ENHANCEMENT
+// ============================================
+
+app.get('/spinspg/export/orders', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [orders] = await db.query(
+      'SELECT order_number, customer_name, service_type, cycle_type, price, payment_status, order_status, created_at FROM spinspg_orders WHERE user_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+    
+    let csv = 'Order Number,Customer,Service,Cycle,Price,Payment,Status,Date\n';
+    orders.forEach(o => {
+      csv += `${o.order_number},${o.customer_name},${o.service_type},${o.cycle_type},${o.price},${o.payment_status},${o.order_status},${o.created_at}\n`;
     });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=spinspring_orders_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch(err) {
+    res.redirect('/spinspg/reports');
   }
 });
 
-// SpinSpring Landing Page
-app.get('/spinspg', (req, res) => {
-  res.render('spinspring/landing', { title: 'SpinSpring - Smart Laundry Automation' });
-});
-
-// API: Get customer active orders
-app.get('/spinspg/api/customer-orders', async (req, res) => {
-  if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
-    return res.json({ success: false });
+app.get('/spinspg/export/revenue', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    const [devices] = await db.query(
+      'SELECT device_name, device_type, cycles_completed, today_revenue, total_revenue FROM spinspg_devices WHERE owner_id = ?',
+      [userId]
+    );
+    
+    let csv = 'Machine,Type,Total Cycles,Today Revenue,Total Revenue\n';
+    devices.forEach(d => {
+      csv += `${d.device_name},${d.device_type},${d.cycles_completed},${d.today_revenue},${d.total_revenue}\n`;
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=spinspring_revenue_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch(err) {
+    res.redirect('/spinspg/reports');
   }
-  const customerId = req.session.spinUser.customerId;
-  const [activeOrders] = await db.query(
-    "SELECT * FROM spinspg_orders WHERE customer_name = ? AND order_status IN ('queued', 'in_progress') ORDER BY created_at DESC",
-    [customerId]
-  );
-  res.json({ success: true, activeOrders });
 });
 
-// Attendant: Create Order
+app.get('/spinspg/api/chart-data', isSpinAuth, async (req, res) => {
+  try {
+    const userId = req.session.spinUser.id;
+    
+    const [daily] = await db.query(`
+      SELECT DATE(created_at) as date, SUM(price) as revenue, COUNT(*) as orders
+      FROM spinspg_orders
+      WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `, [userId]);
+    
+    const [hourly] = await db.query(`
+      SELECT HOUR(created_at) as hour, COUNT(*) as orders
+      FROM spinspg_orders
+      WHERE user_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      GROUP BY HOUR(created_at)
+      ORDER BY hour
+    `, [userId]);
+    
+    res.json({ success: true, daily, hourly });
+  } catch(err) {
+    res.json({ success: false });
+  }
+});
+
+// ============================================
+// WEIGHT-BASED PRICING SYSTEM
+// ============================================
+
+function calculateWeightPrice(weightKg, pricePerKg) {
+  if (!weightKg || !pricePerKg) return 0;
+  return parseFloat((weightKg * pricePerKg).toFixed(2));
+}
+
+app.post('/spinspg/device/:deviceId/weight-settings', isSpinAuth, async (req, res) => {
+  try {
+    const { price_per_kg, max_capacity_kg, min_capacity_kg } = req.body;
+    const userId = req.session.spinUser.id;
+    
+    await db.query(
+      'UPDATE spinspg_devices SET price_per_kg = ?, max_capacity_kg = ?, min_capacity_kg = ? WHERE device_id = ? AND owner_id = ?',
+      [price_per_kg, max_capacity_kg, min_capacity_kg || 1, req.params.deviceId, userId]
+    );
+    
+    req.flash('success_msg', 'Weight settings updated!');
+    res.redirect(`/spinspg/device/${req.params.deviceId}`);
+  } catch(err) {
+    req.flash('error_msg', 'Failed to update weight settings');
+    res.redirect(`/spinspg/device/${req.params.deviceId}`);
+  }
+});
+
 app.post('/spinspg/attendant/orders', isSpinAttendant, async (req, res) => {
   try {
-    const { device_id, customer_id, service_type, cycle_type, price, payment_status } = req.body;
+    const { device_id, customer_id, service_type, cycle_type, weight_kg, payment_status } = req.body;
+    const ownerId = req.session.spinUser.ownerId;
     const orderNumber = 'SS-' + Date.now().toString(36).toUpperCase();
     
-    await db.query(
-      'INSERT INTO spinspg_orders (order_number, device_id, user_id, customer_name, service_type, cycle_type, price, payment_status, order_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [orderNumber, device_id, req.session.spinUser.ownerId, customer_id, service_type, cycle_type, price, payment_status, 'queued']
+    const [devices] = await db.query(
+      'SELECT price_per_kg, max_capacity_kg, min_capacity_kg FROM spinspg_devices WHERE device_id = ?',
+      [device_id]
     );
     
-    // Update customer stats
-    await db.query('UPDATE spinspg_customers SET total_cycles = total_cycles + 1, total_spent = total_spent + ?, loyalty_points = loyalty_points + FLOOR(?/100) WHERE customer_unique_id = ?',
-      [price, price, customer_id]);
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Machine not found');
+      return res.redirect('/spinspg/attendant');
+    }
     
-    req.flash('success_msg', 'Order created: ' + orderNumber);
+    const machine = devices[0];
+    const weight = parseFloat(weight_kg);
+    
+    if (weight > parseFloat(machine.max_capacity_kg)) {
+      req.flash('error_msg', `Weight exceeds machine capacity! Max: ${machine.max_capacity_kg}kg`);
+      return res.redirect('/spinspg/attendant');
+    }
+    
+    if (weight < parseFloat(machine.min_capacity_kg || 1)) {
+      req.flash('error_msg', `Weight below minimum! Min: ${machine.min_capacity_kg || 1}kg`);
+      return res.redirect('/spinspg/attendant');
+    }
+    
+    const totalPrice = calculateWeightPrice(weight, parseFloat(machine.price_per_kg));
+    
+    await db.query(
+      `INSERT INTO spinspg_orders (order_number, device_id, user_id, customer_name, service_type, cycle_type, price, weight_kg, price_per_kg, total_weight_price, payment_status, order_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
+      [orderNumber, device_id, ownerId, customer_id, service_type, cycle_type, totalPrice, weight, machine.price_per_kg, totalPrice, payment_status]
+    );
+    
+    if (customer_id !== 'walk-in') {
+      await db.query(
+        'UPDATE spinspg_customers SET total_cycles = total_cycles + 1, total_spent = total_spent + ?, loyalty_points = loyalty_points + FLOOR(?/100) WHERE customer_unique_id = ?',
+        [totalPrice, totalPrice, customer_id]
+      );
+    }
+    
+    req.flash('success_msg', `Order ${orderNumber} created! ${weight}kg × Ksh ${machine.price_per_kg}/kg = Ksh ${totalPrice}`);
     res.redirect('/spinspg/attendant');
   } catch(err) {
+    console.error('Order error:', err);
     req.flash('error_msg', 'Failed to create order');
     res.redirect('/spinspg/attendant');
   }
 });
 
-// ===== CUSTOMER PANEL =====
-
-// Customer Login (by unique ID)
-app.get('/spinspg/customer-login', (req, res) => {
-  res.render('spinspring/customer-login', { title: 'Customer Login - SpinSpring' });
-});
-
-app.post('/spinspg/customer-login', async (req, res) => {
+app.get('/spinspg/api/machine/:deviceId/weight', isSpinAuth, async (req, res) => {
   try {
-    const { customer_id } = req.body;
-    const [customers] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ? AND is_active = 1', [customer_id]);
-    
-    if (customers.length === 0) {
-      req.flash('error_msg', 'Invalid customer ID');
-      return res.redirect('/spinspg/customer-login');
-    }
-    
-    const customer = customers[0];
-    req.session.spinUser = {
-      id: customer.id,
-      name: customer.full_name,
-      customerId: customer.customer_unique_id,
-      role: 'customer',
-      ownerId: customer.owner_id
-    };
-    
-    res.redirect('/spinspg/customer');
-  } catch(err) {
-    req.flash('error_msg', 'Login failed');
-    res.redirect('/spinspg/customer-login');
-  }
-});
-
-app.get('/spinspg/customer', async (req, res) => {
-  if (!req.session.spinUser || req.session.spinUser.role !== 'customer') {
-    return res.redirect('/spinspg/customer-login');
-  }
-  
-  const customerId = req.session.spinUser.customerId;
-  const [customerData] = await db.query('SELECT * FROM spinspg_customers WHERE customer_unique_id = ?', [customerId]);
-  const [orders] = await db.query('SELECT * FROM spinspg_orders WHERE customer_name = ? ORDER BY created_at DESC LIMIT 20', [customerId]);
-  
-  // ADD: Get active orders
-  const [activeOrders] = await db.query(
-    "SELECT * FROM spinspg_orders WHERE customer_name = ? AND order_status IN ('queued', 'in_progress') ORDER BY created_at DESC",
-    [customerId]
-  );
-  
-  res.render('spinspring/customer-dashboard', {
-    title: 'My Account - SpinSpring',
-    customer: customerData[0],
-    orders, activeOrders,
-    user: req.session.spinUser
-  });
-});
-
-// Update login route to redirect based on role
-app.post('/spinspg/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const bcrypt = require('bcryptjs');
-    const [users] = await db.query('SELECT * FROM spinspg_users WHERE email = ? AND is_active = 1', [email]);
-    
-    if (users.length === 0) {
-      req.flash('error_msg', 'Invalid credentials');
-      return res.redirect('/spinspg/login');
-    }
-    
-    const match = await bcrypt.compare(password, users[0].password);
-    if (!match) {
-      req.flash('error_msg', 'Invalid credentials');
-      return res.redirect('/spinspg/login');
-    }
-    
-    req.session.spinUser = {
-      id: users[0].id,
-      email: users[0].email,
-      name: users[0].full_name,
-      business: users[0].business_name,
-      role: users[0].role || 'owner'
-    };
-    
-    // Redirect based on role
-    if (users[0].role === 'owner') {
-      res.redirect('/spinspg/owner');
-    } else if (users[0].role === 'attendant') {
-      res.redirect('/spinspg/attendant');
-    } else {
-      res.redirect('/spinspg/customer');
-    }
-  } catch(err) {
-    req.flash('error_msg', 'Login failed');
-    res.redirect('/spinspg/login');
-  }
-});
-
-// Register route - set role as owner
-app.post('/spinspg/register', async (req, res) => {
-  try {
-    const { email, password, password2, full_name, business_name, phone } = req.body;
-    const bcrypt = require('bcryptjs');
-    
-    if (password !== password2) {
-      req.flash('error_msg', 'Passwords do not match');
-      return res.redirect('/spinspg/register');
-    }
-    
-    // Check duplicate email
-    const [existing] = await db.query('SELECT id FROM spinspg_users WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      req.flash('error_msg', 'Email already registered');
-      return res.redirect('/spinspg/register');
-    }
-    
-    const hash = await bcrypt.hash(password, 10);
-    await db.query(
-      "INSERT INTO spinspg_users (email, password, full_name, business_name, phone, role) VALUES (?, ?, ?, ?, ?, 'owner')",
-      [email, hash, full_name, business_name, phone]
+    const [devices] = await db.query(
+      'SELECT price_per_kg, max_capacity_kg, min_capacity_kg FROM spinspg_devices WHERE device_id = ?',
+      [req.params.deviceId]
     );
-    
-    req.flash('success_msg', 'Account created! Login now.');
-    res.redirect('/spinspg/login');
+    if (devices.length === 0) {
+      return res.json({ success: false, error: 'Machine not found' });
+    }
+    res.json({ success: true, machine: devices[0] });
   } catch(err) {
-    req.flash('error_msg', 'Registration failed');
-    res.redirect('/spinspg/register');
+    res.json({ success: false, error: err.message });
   }
 });
 
-// ===== MAINTENANCE LOG =====
+// ============================================
+// CUEPAY ANALYTICS & REPORTS
+// ============================================
+
+async function getDeviceStats(deviceId, startDate, endDate) {
+  const [stats] = await db.query(
+    `SELECT
+      COUNT(*) as total_payments,
+      COALESCE(SUM(games_earned), 0) as total_games,
+      COALESCE(SUM(amount), 0) as total_revenue,
+      COALESCE(AVG(amount), 0) as avg_payment,
+      COUNT(DISTINCT customer_number) as unique_customers,
+      MIN(payment_time) as first_payment,
+      MAX(payment_time) as last_payment
+     FROM cuepay_payments
+     WHERE device_id = ? AND payment_time >= ? AND payment_time <= ?`,
+    [deviceId, startDate, endDate]
+  );
+  return stats[0];
+}
+
+async function getPeakHour(deviceId, date) {
+  const [hours] = await db.query(
+    `SELECT HOUR(payment_time) as hour, COUNT(*) as count, SUM(amount) as revenue
+     FROM cuepay_payments
+     WHERE device_id = ? AND DATE(payment_time) = ?
+     GROUP BY HOUR(payment_time)
+     ORDER BY count DESC LIMIT 1`,
+    [deviceId, date]
+  );
+  return hours[0] || null;
+}
+
+app.get('/cuepay/dashboard', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const today = new Date().toISOString().split('T')[0];
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
+      [userId]
+    );
+
+    for (let device of devices) {
+      device.battery_percent = device.battery_voltage ?
+        Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+      device.battery_percent = Math.max(0, Math.min(100, device.battery_percent));
+      device.is_online = device.status === 'online';
+
+      const todayStats = await getDeviceStats(device.device_id, today + ' 00:00:00', today + ' 23:59:59');
+      device.today_games = todayStats.total_games;
+      device.today_revenue = todayStats.total_revenue;
+      device.today_payments = todayStats.total_payments;
+      device.today_customers = todayStats.unique_customers;
+
+      const weekStats = await getDeviceStats(device.device_id, weekAgo + ' 00:00:00', today + ' 23:59:59');
+      device.week_games = weekStats.total_games;
+      device.week_revenue = weekStats.total_revenue;
+      device.week_avg_payment = weekStats.avg_payment;
+
+      const monthStats = await getDeviceStats(device.device_id, monthAgo + ' 00:00:00', today + ' 23:59:59');
+      device.month_games = monthStats.total_games;
+      device.month_revenue = monthStats.total_revenue;
+
+      const peak = await getPeakHour(device.device_id, today);
+      device.peak_hour = peak ? peak.hour : null;
+      device.peak_hour_count = peak ? peak.count : 0;
+
+      const [dailyBreakdown] = await db.query(
+        `SELECT DATE(payment_time) as date,
+                SUM(amount) as revenue,
+                SUM(games_earned) as games,
+                COUNT(*) as payments
+         FROM cuepay_payments
+         WHERE device_id = ? AND payment_time >= ?
+         GROUP BY DATE(payment_time)
+         ORDER BY date DESC LIMIT 7`,
+        [device.device_id, weekAgo + ' 00:00:00']
+      );
+      device.daily_breakdown = dailyBreakdown.reverse();
+
+      const [recentPayments] = await db.query(
+        'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 10',
+        [device.device_id]
+      );
+      device.recent_payments = recentPayments;
+    }
+
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard - Ardthon Solutions',
+      devices,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    console.error('Dashboard error:', err);
+    res.render('cuepay/dashboard', {
+      title: 'CuePay Dashboard',
+      devices: [],
+      user: req.session.cuepayUser
+    });
+  }
+});
+
+app.get('/cuepay/device/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const { deviceId } = req.params;
+    const { period } = req.query;
+
+    const [devices] = await db.query(
+      'SELECT * FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
+      [deviceId, userId]
+    );
+
+    if (devices.length === 0) {
+      req.flash('error_msg', 'Device not found');
+      return res.redirect('/cuepay/dashboard');
+    }
+
+    const device = devices[0];
+    device.battery_percent = device.battery_voltage ?
+      Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
+
+    const today = new Date().toISOString().split('T')[0];
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const monthStart = new Date().toISOString().split('T')[0].substring(0, 7) + '-01';
+
+    const todayStats = await getDeviceStats(deviceId, today + ' 00:00:00', today + ' 23:59:59');
+    const weekStats = await getDeviceStats(deviceId, weekAgo + ' 00:00:00', today + ' 23:59:59');
+    const monthStats = await getDeviceStats(deviceId, monthStart + ' 00:00:00', today + ' 23:59:59');
+
+    const [hourlyBreakdown] = await db.query(
+      `SELECT HOUR(payment_time) as hour,
+              SUM(amount) as revenue,
+              SUM(games_earned) as games,
+              COUNT(*) as payments,
+              COUNT(DISTINCT customer_number) as customers
+       FROM cuepay_payments
+       WHERE device_id = ? AND DATE(payment_time) = ?
+       GROUP BY HOUR(payment_time)
+       ORDER BY hour`,
+      [deviceId, today]
+    );
+
+    const [dailyBreakdown] = await db.query(
+      `SELECT DATE(payment_time) as date,
+              SUM(amount) as revenue,
+              SUM(games_earned) as games,
+              COUNT(*) as payments,
+              COUNT(DISTINCT customer_number) as customers
+       FROM cuepay_payments
+       WHERE device_id = ? AND payment_time >= ?
+       GROUP BY DATE(payment_time)
+       ORDER BY date DESC`,
+      [deviceId, new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
+    );
+
+    const [weeklySummary] = await db.query(
+      `SELECT YEARWEEK(payment_time, 1) as yw,
+              MIN(DATE(payment_time)) as week_start,
+              MAX(DATE(payment_time)) as week_end,
+              SUM(amount) as revenue,
+              SUM(games_earned) as games,
+              COUNT(*) as payments
+       FROM cuepay_payments
+       WHERE device_id = ? AND payment_time >= ?
+       GROUP BY YEARWEEK(payment_time, 1)
+       ORDER BY yw DESC LIMIT 12`,
+      [deviceId, new Date(Date.now() - 84 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
+    );
+
+    const [topCustomers] = await db.query(
+      `SELECT customer_number,
+              COUNT(*) as visits,
+              SUM(amount) as total_spent,
+              SUM(games_earned) as total_games,
+              MAX(payment_time) as last_visit
+       FROM cuepay_payments
+       WHERE device_id = ? AND customer_number != 'Unknown'
+       GROUP BY customer_number
+       ORDER BY total_spent DESC LIMIT 10`,
+      [deviceId]
+    );
+
+    const [payments] = await db.query(
+      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 50',
+      [deviceId]
+    );
+
+    const [commands] = await db.query(
+      "SELECT * FROM cuepay_commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10",
+      [deviceId]
+    );
+
+    res.render('cuepay/device-detail', {
+      title: `${device.device_name} - CuePay Analytics`,
+      device,
+      todayStats,
+      weekStats,
+      monthStats,
+      hourlyBreakdown,
+      dailyBreakdown,
+      weeklySummary,
+      topCustomers,
+      payments,
+      commands,
+      selectedPeriod: period || 'today'
+    });
+  } catch(err) {
+    console.error('Device detail error:', err);
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.get('/cuepay/api/analytics/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const { deviceId } = req.params;
+
+    const [devices] = await db.query(
+      'SELECT id FROM cuepay_devices WHERE device_id = ? AND owner_id = ?',
+      [deviceId, userId]
+    );
+    if (devices.length === 0) return res.status(403).json({ error: 'Access denied' });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const [hourly] = await db.query(
+      `SELECT HOUR(payment_time) as hour, SUM(amount) as revenue, SUM(games_earned) as games, COUNT(*) as payments
+       FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?
+       GROUP BY HOUR(payment_time) ORDER BY hour`,
+      [deviceId, today]
+    );
+
+    const [daily] = await db.query(
+      `SELECT DATE(payment_time) as date, SUM(amount) as revenue, SUM(games_earned) as games
+       FROM cuepay_payments WHERE device_id = ? AND payment_time >= ?
+       GROUP BY DATE(payment_time) ORDER BY date DESC LIMIT 7`,
+      [deviceId, new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0] + ' 00:00:00']
+    );
+
+    res.json({ hourly: hourly.reverse(), daily: daily.reverse() });
+  } catch(err) {
+    res.status(500).json({ error: 'Failed to get analytics' });
+  }
+});
+
+// ============================================
+// FINANCIAL REPORTS
+// ============================================
+
+app.get('/cuepay/reports/daily', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+
+    const [devices] = await db.query(
+      'SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?',
+      [userId]
+    );
+
+    const reports = [];
+    for (const device of devices) {
+      const [stats] = await db.query(
+        `SELECT
+          COUNT(*) as payments,
+          SUM(amount) as revenue,
+          SUM(games_earned) as games,
+          COUNT(DISTINCT customer_number) as customers,
+          AVG(amount) as avg_payment,
+          MIN(payment_time) as first_game,
+          MAX(payment_time) as last_game
+         FROM cuepay_payments
+         WHERE device_id = ? AND DATE(payment_time) = ?`,
+        [device.device_id, date]
+      );
+
+      const [hourly] = await db.query(
+        `SELECT HOUR(payment_time) as hour, SUM(amount) as revenue, COUNT(*) as payments
+         FROM cuepay_payments WHERE device_id = ? AND DATE(payment_time) = ?
+         GROUP BY HOUR(payment_time) ORDER BY hour`,
+        [device.device_id, date]
+      );
+
+      reports.push({
+        ...device,
+        stats: stats[0],
+        hourly_breakdown: hourly
+      });
+    }
+
+    const [goals] = await db.query(
+      'SELECT * FROM cuepay_goals WHERE owner_id = ? AND is_active = 1 AND start_date <= ? AND (end_date >= ? OR end_date IS NULL)',
+      [userId, date, date]
+    );
+
+    res.render('cuepay/reports/daily', {
+      title: 'Daily Report - CuePay',
+      reports,
+      goals,
+      selectedDate: date,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    console.error('Daily report error:', err);
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.get('/cuepay/reports/weekly', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const [devices] = await db.query('SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?', [userId]);
+
+    const reports = [];
+    for (const device of devices) {
+      const [dailyStats] = await db.query(
+        `SELECT DATE(payment_time) as date,
+                DAYNAME(payment_time) as day_name,
+                SUM(amount) as revenue,
+                SUM(games_earned) as games,
+                COUNT(*) as payments,
+                COUNT(DISTINCT customer_number) as customers
+         FROM cuepay_payments
+         WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+         GROUP BY DATE(payment_time)
+         ORDER BY date DESC`,
+        [device.device_id]
+      );
+
+      const [weekTotal] = await db.query(
+        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games, COUNT(*) as total_payments
+         FROM cuepay_payments WHERE device_id = ? AND payment_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
+        [device.device_id]
+      );
+
+      reports.push({ ...device, daily: dailyStats, total: weekTotal[0] });
+    }
+
+    res.render('cuepay/reports/weekly', {
+      title: 'Weekly Report - CuePay',
+      reports,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.get('/cuepay/reports/monthly', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const month = req.query.month || new Date().toISOString().substring(0, 7);
+
+    const [devices] = await db.query('SELECT device_id, device_name FROM cuepay_devices WHERE owner_id = ?', [userId]);
+
+    const reports = [];
+    for (const device of devices) {
+      const [weeklyStats] = await db.query(
+        `SELECT WEEK(payment_time, 1) as week_num,
+                MIN(DATE(payment_time)) as week_start,
+                SUM(amount) as revenue,
+                SUM(games_earned) as games,
+                COUNT(*) as payments
+         FROM cuepay_payments
+         WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?
+         GROUP BY WEEK(payment_time, 1)
+         ORDER BY week_num`,
+        [device.device_id, month]
+      );
+
+      const [monthTotal] = await db.query(
+        `SELECT SUM(amount) as total_revenue, SUM(games_earned) as total_games,
+                COUNT(*) as total_payments, COUNT(DISTINCT customer_number) as total_customers,
+                AVG(amount) as avg_payment
+         FROM cuepay_payments WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
+        [device.device_id, month]
+      );
+
+      const prevMonth = month.substring(5) === '01' ?
+        (parseInt(month.substring(0,4)) - 1) + '-12' :
+        month.substring(0,5) + String(parseInt(month.substring(5)) - 1).padStart(2, '0');
+
+      const [prevTotal] = await db.query(
+        `SELECT SUM(amount) as prev_revenue FROM cuepay_payments
+         WHERE device_id = ? AND DATE_FORMAT(payment_time, '%Y-%m') = ?`,
+        [device.device_id, prevMonth]
+      );
+
+      const growth = prevTotal[0].prev_revenue > 0 ?
+        ((monthTotal[0].total_revenue - prevTotal[0].prev_revenue) / prevTotal[0].prev_revenue * 100) : 0;
+
+      reports.push({ ...device, weekly: weeklyStats, total: monthTotal[0], growth: growth.toFixed(1) });
+    }
+
+    res.render('cuepay/reports/monthly', {
+      title: 'Monthly Report - CuePay',
+      reports,
+      selectedMonth: month,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.get('/cuepay/export/csv/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const [payments] = await db.query(
+      'SELECT transaction_id, amount, customer_number, games_earned, payment_time FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 1000',
+      [deviceId]
+    );
+
+    let csv = 'Transaction ID,Amount,Customer,Games,Date Time\n';
+    payments.forEach(p => {
+      csv += `${p.transaction_id},${p.amount},${p.customer_number},${p.games_earned},${p.payment_time}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=cuepay_${deviceId}_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ============================================
+// CUSTOMER ANALYTICS
+// ============================================
+
+async function getCustomerRetention(deviceId, days) {
+  const [result] = await db.query(
+    `SELECT
+      COUNT(DISTINCT customer_number) as total_customers,
+      COUNT(DISTINCT CASE WHEN visits >= 2 THEN customer_number END) as returning_customers,
+      COUNT(DISTINCT CASE WHEN visits = 1 THEN customer_number END) as new_customers
+     FROM (
+       SELECT customer_number, COUNT(*) as visits
+       FROM cuepay_payments
+       WHERE device_id = ? AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND customer_number != 'Unknown'
+       GROUP BY customer_number
+     ) t`,
+    [deviceId, days]
+  );
+  return result[0];
+}
+
+app.get('/cuepay/customers/:deviceId', isCuePayAuth, async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const [topCustomers] = await db.query(
+      `SELECT customer_number,
+              COUNT(*) as visits,
+              SUM(amount) as total_spent,
+              SUM(games_earned) as total_games,
+              AVG(amount) as avg_spend,
+              MAX(payment_time) as last_visit,
+              MIN(payment_time) as first_visit
+       FROM cuepay_payments
+       WHERE device_id = ? AND customer_number != 'Unknown'
+       GROUP BY customer_number
+       ORDER BY total_spent DESC LIMIT 20`,
+      [deviceId]
+    );
+
+    const retention = await getCustomerRetention(deviceId, 30);
+
+    res.render('cuepay/customers', {
+      title: 'Customer Analytics - CuePay',
+      topCustomers,
+      retention,
+      deviceId,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ============================================
+// TABLE PERFORMANCE
+// ============================================
+
+app.get('/cuepay/compare', isCuePayAuth, async (req, res) => {
+  try {
+    const userId = req.session.cuepayUser.id;
+    const period = req.query.period || '7';
+
+    const [devices] = await db.query(
+      `SELECT d.*,
+        (SELECT SUM(amount) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_revenue,
+        (SELECT SUM(games_earned) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_games,
+        (SELECT COUNT(*) FROM cuepay_payments WHERE device_id = d.device_id AND payment_time >= DATE_SUB(NOW(), INTERVAL ? DAY)) as period_payments
+       FROM cuepay_devices d WHERE d.owner_id = ?
+       ORDER BY period_revenue DESC`,
+      [parseInt(period), parseInt(period), userId]
+    );
+
+    res.render('cuepay/compare', {
+      title: 'Table Comparison - CuePay',
+      devices,
+      selectedPeriod: period,
+      user: req.session.cuepayUser
+    });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ============================================
+// GOALS MANAGEMENT
+// ============================================
+
+app.post('/cuepay/goals', isCuePayAuth, async (req, res) => {
+  try {
+    const { device_id, goal_type, target_revenue, target_games, start_date } = req.body;
+    await db.query(
+      'INSERT INTO cuepay_goals (owner_id, device_id, goal_type, target_revenue, target_games, start_date) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.session.cuepayUser.id, device_id || null, goal_type, target_revenue, target_games || null, start_date]
+    );
+    req.flash('success_msg', 'Goal set successfully!');
+    res.redirect('/cuepay/dashboard');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to set goal');
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+// ============================================
+// STAFF MANAGEMENT
+// ============================================
+
+app.get('/cuepay/staff', isCuePayAuth, async (req, res) => {
+  try {
+    const [staff] = await db.query('SELECT * FROM cuepay_staff WHERE owner_id = ? ORDER BY full_name', [req.session.cuepayUser.id]);
+    res.render('cuepay/staff', { title: 'Staff Management - CuePay', staff, user: req.session.cuepayUser });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.post('/cuepay/staff', isCuePayAuth, async (req, res) => {
+  try {
+    const { full_name, email, phone, pin_code, role, commission_percent } = req.body;
+    await db.query(
+      'INSERT INTO cuepay_staff (owner_id, full_name, email, phone, pin_code, role, commission_percent) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.session.cuepayUser.id, full_name, email, phone, pin_code, role, commission_percent || 0]
+    );
+    req.flash('success_msg', 'Staff added!');
+    res.redirect('/cuepay/staff');
+  } catch(err) {
+    req.flash('error_msg', 'Failed to add staff');
+    res.redirect('/cuepay/staff');
+  }
+});
+
+// ============================================
+// ALERTS
+// ============================================
+
+app.get('/cuepay/alerts', isCuePayAuth, async (req, res) => {
+  try {
+    const [alerts] = await db.query('SELECT * FROM cuepay_alerts WHERE owner_id = ?', [req.session.cuepayUser.id]);
+    const [history] = await db.query(
+      'SELECT * FROM cuepay_alert_history WHERE owner_id = ? ORDER BY created_at DESC LIMIT 20',
+      [req.session.cuepayUser.id]
+    );
+    res.render('cuepay/alerts', { title: 'Alert Settings - CuePay', alerts, history, user: req.session.cuepayUser });
+  } catch(err) {
+    res.redirect('/cuepay/dashboard');
+  }
+});
+
+app.post('/cuepay/alerts/toggle/:id', isCuePayAuth, async (req, res) => {
+  await db.query('UPDATE cuepay_alerts SET is_enabled = NOT is_enabled WHERE id = ? AND owner_id = ?', [req.params.id, req.session.cuepayUser.id]);
+  res.redirect('/cuepay/alerts');
+});
+
+// ============================================
+// MAINTENANCE LOG
+// ============================================
 
 app.get('/cuepay/maintenance/:deviceId', isCuePayAuth, async (req, res) => {
   try {
@@ -3166,602 +3499,12 @@ app.post('/cuepay/maintenance/:deviceId', isCuePayAuth, async (req, res) => {
   }
 });
 
-// ===== PROJECT REVIEWS =====
-
-// Create reviews table if not exists
-db.query(`CREATE TABLE IF NOT EXISTS project_reviews (
-  id int NOT NULL AUTO_INCREMENT,
-  name varchar(100) NOT NULL,
-  project varchar(100) NOT NULL,
-  rating tinyint NOT NULL,
-  comment text NOT NULL,
-  created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch(() => {});
-
-// Update projects route to include reviews
-app.get('/projects', async (req, res) => {
-  try {
-    const [reviews] = await db.query('SELECT * FROM project_reviews ORDER BY created_at DESC LIMIT 20');
-    res.render('projects', {
-      title: 'Projects - Ardthon Solutions',
-      reviews: reviews || []
-    });
-  } catch(err) {
-    res.render('projects', { title: 'Projects - Ardthon Solutions', reviews: [] });
-  }
-});
-
-// Submit review
-app.post('/projects/review', async (req, res) => {
-  try {
-    const { name, project, rating, comment } = req.body;
-    await db.query(
-      'INSERT INTO project_reviews (name, project, rating, comment) VALUES (?, ?, ?, ?)',
-      [name, project, parseInt(rating), comment]
-    );
-    req.flash('success_msg', 'Review submitted! Thank you for your feedback.');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to submit review');
-  }
-  res.redirect('/projects');
-});
-
-// ===== TIME & STATUS ENDPOINTS =====
-
-// Get server time (for ESP32 to sync)
-app.get('/cuepay/api/time', async (req, res) => {
-  const now = new Date();
-  const timezone = req.query.tz || 'Africa/Nairobi';
-  res.json({
-    timestamp: now.toISOString(),
-    unix: Math.floor(now.getTime() / 1000),
-    time: now.toLocaleTimeString('en-KE', { timeZone: 'Africa/Nairobi', hour12: false }),
-    date: now.toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' }),
-    timezone: timezone
-  });
-});
-
-// Offline detection - update device status
-const OFFLINE_TIMEOUT = 60000; // 60 seconds without sync = offline
-
-// Auto-check offline devices every 30 seconds
-setInterval(async () => {
-  try {
-    await db.query(
-      "UPDATE cuepay_devices SET status = 'offline' WHERE status = 'online' AND last_sync < DATE_SUB(NOW(), INTERVAL 60 SECOND)"
-    );
-  } catch(e) {}
-}, 30000);
-
-// Device heartbeat endpoint
-app.post('/cuepay/api/heartbeat', validateDeviceApiKey, async (req, res) => {
-  try {
-    const device = req.cuepayDevice;
-    await db.query(
-      "UPDATE cuepay_devices SET status = 'online', last_sync = NOW() WHERE device_id = ?",
-      [device.device_id]
-    );
-    res.json({ status: 'ok', server_time: new Date().toISOString() });
-  } catch(err) {
-    res.status(500).json({ error: 'Heartbeat failed' });
-  }
-});
-// API: Get dashboard data for auto-refresh
-app.get('/cuepay/api/dashboard-data', isCuePayAuth, async (req, res) => {
-  try {
-    const userId = req.session.cuepayUser.id;
-    const [devices] = await db.query(
-      'SELECT device_id, device_name, games_available, battery_voltage, status, last_sync, today_revenue, today_games, game_price FROM cuepay_devices WHERE owner_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
-    res.json({ success: true, devices, timestamp: new Date().toISOString() });
-  } catch(err) {
-    res.status(500).json({ success: false, error: 'Failed to load data' });
-  }
-});
-
 // ============================================
-// ADMIN DASHBOARD - View All CuePay Devices
-// ============================================
-
-// Admin middleware - check if user is admin
-function isAdmin(req, res, next) {
-  if (req.session.user && req.session.user.role === 'admin') return next();
-  req.flash('error_msg', 'Admin access required');
-  res.redirect('/auth/login');
-}
-
-// Admin Dashboard - View ALL devices from ALL users
-app.get('/admin', isAdmin, async (req, res) => {
-  try {
-    const [devices] = await db.query(`
-      SELECT d.*, u.email, u.full_name as owner_name
-      FROM cuepay_devices d
-      LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      ORDER BY d.created_at DESC
-    `);
-
-    const [stats] = await db.query(`
-      SELECT
-        COUNT(*) as total_devices,
-        SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online_devices,
-        SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline_devices,
-        COALESCE(SUM(today_revenue), 0) as total_today_revenue,
-        COALESCE(SUM(total_revenue), 0) as total_all_revenue
-      FROM cuepay_devices
-    `);
-
-    res.render('admin/dashboard', {
-      title: 'Admin Dashboard - Ardthon Solutions',
-      devices,
-      stats: stats[0],
-      user: req.session.user
-    });
-  } catch(err) {
-    console.error('Admin dashboard error:', err);
-    res.render('admin/dashboard', {
-      title: 'Admin Dashboard',
-      devices: [],
-      stats: { total_devices: 0, online_devices: 0, offline_devices: 0, total_today_revenue: 0, total_all_revenue: 0 },
-      user: req.session.user
-    });
-  }
-});
-
-
-
-// Admin: View single device detail
-app.get('/admin/device/:deviceId', isAdmin, async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-
-    const [devices] = await db.query(`
-      SELECT d.*, u.username, u.email, u.fullName as owner_name
-      FROM cuepay_devices d
-      LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      WHERE d.device_id = ?
-    `, [deviceId]);
-
-    if (devices.length === 0) {
-      req.flash('error_msg', 'Device not found');
-      return res.redirect('/admin');
-    }
-
-    const device = devices[0];
-    device.battery_percent = device.battery_voltage ?
-      Math.round(((device.battery_voltage - 10.5) / (12.6 - 10.5)) * 100) : 0;
-
-    const [payments] = await db.query(
-      'SELECT * FROM cuepay_payments WHERE device_id = ? ORDER BY payment_time DESC LIMIT 100',
-      [deviceId]
-    );
-
-    const [commands] = await db.query(
-      'SELECT * FROM cuepay_commands WHERE device_id = ? ORDER BY created_at DESC LIMIT 50',
-      [deviceId]
-    );
-
-    const [alerts] = await db.query(
-      'SELECT * FROM cuepay_alert_history WHERE device_id = ? ORDER BY created_at DESC LIMIT 20',
-      [deviceId]
-    );
-
-    res.render('admin/device-detail', {
-      title: `${device.device_name} - Admin`,
-      device,
-      payments,
-      commands,
-      alerts,
-      user: req.session.user
-    });
-  } catch(err) {
-    console.error('Admin device detail error:', err);
-    res.redirect('/admin');
-  }
-});
-
-// Admin: Send command to any device
-app.post('/admin/device/:deviceId/command', isAdmin, async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-    const { command_type, command_value } = req.body;
-
-    await db.query(
-      "INSERT INTO cuepay_commands (device_id, command_type, command_value, status) VALUES (?, ?, ?, 'pending')",
-      [deviceId, command_type, command_value]
-    );
-
-    if (command_type === 'change_price') {
-      await db.query('UPDATE cuepay_devices SET game_price = ? WHERE device_id = ?',
-        [parseFloat(command_value), deviceId]);
-    } else if (command_type === 'add_games') {
-      await db.query(
-        'UPDATE cuepay_devices SET games_available = games_available + ? WHERE device_id = ?',
-        [parseInt(command_value), deviceId]
-      );
-    }  else if (command_type === 'remove_games') {
-       await db.query(
-    'UPDATE cuepay_devices SET games_available = GREATEST(games_available - ?, 0) WHERE device_id = ? AND owner_id = ?',
-      [parseInt(command_value), deviceId, userId]
-      );
-    }
-
-
-
-    req.flash('success_msg', `Command "${command_type}" sent to ${deviceId}`);
-    res.redirect(`/admin/device/${deviceId}`);
-  } catch(err) {
-    console.error('Admin command error:', err);
-    req.flash('error_msg', 'Failed to send command');
-    res.redirect('/admin');
-  }
-});
-
-// Admin: Delete device
-app.post('/admin/device/:deviceId/delete', isAdmin, async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-
-    // Delete related data
-    await db.query('DELETE FROM cuepay_payments WHERE device_id = ?', [deviceId]);
-    await db.query('DELETE FROM cuepay_commands WHERE device_id = ?', [deviceId]);
-    await db.query('DELETE FROM cuepay_alerts WHERE device_id = ?', [deviceId]);
-    await db.query('DELETE FROM cuepay_alert_history WHERE device_id = ?', [deviceId]);
-    await db.query('DELETE FROM cuepay_devices WHERE device_id = ?', [deviceId]);
-
-    req.flash('success_msg', `Device ${deviceId} deleted successfully`);
-    res.redirect('/admin');
-  } catch(err) {
-    console.error('Delete device error:', err);
-    req.flash('error_msg', 'Failed to delete device');
-    res.redirect('/admin');
-  }
-});
-
-// Admin: Reset device revenue
-app.post('/admin/device/:deviceId/reset-revenue', isAdmin, async (req, res) => {
-  try {
-    const { deviceId } = req.params;
-    await db.query(
-      'UPDATE cuepay_devices SET today_revenue = 0, today_games = 0, total_revenue = 0 WHERE device_id = ?',
-      [deviceId]
-    );
-    req.flash('success_msg', `Revenue reset for ${deviceId}`);
-    res.redirect(`/admin/device/${deviceId}`);
-  } catch(err) {
-    req.flash('error_msg', 'Failed to reset revenue');
-    res.redirect('/admin');
-  }
-});
-
-// Admin: View all users
-app.get('/admin/users', isAdmin, async (req, res) => {
-  try {
-    const [users] = await db.query(`
-      SELECT u.*,
-        (SELECT COUNT(*) FROM cuepay_devices WHERE owner_id = u.id) as device_count,
-        (SELECT SUM(total_revenue) FROM cuepay_devices WHERE owner_id = u.id) as total_revenue
-      FROM cuepay_users u
-      ORDER BY u.created_at DESC
-    `);
-    res.render('admin/users', {
-      title: 'Users - Admin',
-      users,
-      user: req.session.user
-    });
-  } catch(err) {
-    res.redirect('/admin');
-  }
-});
-
-// Admin: Delete user
-app.post('/admin/users/:userId/delete', isAdmin, async (req, res) => {
-  try {
-    const { userId } = req.params;
-    // Get user's devices
-    const [devices] = await db.query('SELECT device_id FROM cuepay_devices WHERE owner_id = ?', [userId]);
-    for (const d of devices) {
-      await db.query('DELETE FROM cuepay_payments WHERE device_id = ?', [d.device_id]);
-      await db.query('DELETE FROM cuepay_commands WHERE device_id = ?', [d.device_id]);
-    }
-    await db.query('DELETE FROM cuepay_devices WHERE owner_id = ?', [userId]);
-    await db.query('DELETE FROM cuepay_users WHERE id = ?', [userId]);
-    req.flash('success_msg', 'User deleted');
-    res.redirect('/admin/users');
-  } catch(err) {
-    req.flash('error_msg', 'Failed to delete user');
-    res.redirect('/admin/users');
-  }
-});
-
-// Admin: View all payments
-app.get('/admin/payments', isAdmin, async (req, res) => {
-  try {
-    const [payments] = await db.query(`
-      SELECT p.*, d.device_name, u.email as owner_email
-      FROM cuepay_payments p
-      LEFT JOIN cuepay_devices d ON p.device_id = d.device_id
-      LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      ORDER BY p.payment_time DESC
-      LIMIT 200
-    `);
-
-    const [totals] = await db.query(`
-      SELECT SUM(amount) as total, COUNT(*) as count
-      FROM cuepay_payments
-    `);
-
-    res.render('admin/payments', {
-      title: 'All Payments - Admin',
-      payments,
-      totals: totals[0],
-      user: req.session.user
-    });
-  } catch(err) {
-    res.redirect('/admin');
-  }
-});
-
-
-// ============================================
-// ALERT NOTIFICATION SYSTEM
-// ============================================
-
-// Offline detection with smart alerts
-setInterval(async () => {
-  try {
-    // Find devices offline for more than 15 minutes
-    const [offlineDevices] = await db.query(`
-      SELECT d.*, u.email, u.full_name
-      FROM cuepay_devices d
-      LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      WHERE d.status = 'offline'
-        AND d.last_sync IS NOT NULL
-        AND d.last_sync < DATE_SUB(NOW(), INTERVAL 15 MINUTE)
-        AND d.last_sync > DATE_SUB(NOW(), INTERVAL 24 HOUR)
-    `);
-
-    for (const device of offlineDevices) {
-      const [recentAlerts] = await db.query(
-        `SELECT id FROM cuepay_alert_history
-         WHERE device_id = ? AND alert_type = 'device_offline'
-         AND created_at > DATE_SUB(NOW(), INTERVAL 2 HOUR)`,
-        [device.device_id]
-      );
-
-      if (recentAlerts.length === 0) {
-        if (isBusinessHours() && device.email) {
-          const offlineMinutes = Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000);
-          const emailText = 'Device ' + device.device_name + ' is Offline\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nLocation: ' + (device.location_area || 'N/A') + '\nOffline for: ' + offlineMinutes + ' minutes\nLast Seen: ' + new Date(device.last_sync).toLocaleString() + '\nGames Available: ' + (device.games_available || 0) + '\n\nPlease check:\n- Power supply is connected\n- WiFi is working\n- GSM module is functioning\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
-          await sendEmail(device.email, 'Device ' + device.device_name + ' status update', emailText);
-        }
-
-        await db.query(
-          `INSERT INTO cuepay_alert_history (owner_id, device_id, alert_type, message)
-           VALUES (?, ?, 'device_offline', ?)`,
-          [device.owner_id, device.device_id, 'Device offline for ' + Math.round((Date.now() - new Date(device.last_sync).getTime()) / 60000) + ' minutes']
-        );
-      }
-    }
-
-    // Low games alert
-    const [lowGamesDevices] = await db.query(`
-      SELECT d.*, u.email, u.full_name
-      FROM cuepay_devices d
-      LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      WHERE d.games_available <= 5 AND d.games_available > 0
-        AND d.status = 'online'
-    `);
-
-    for (const device of lowGamesDevices) {
-      const [recentAlerts] = await db.query(
-        `SELECT id FROM cuepay_alert_history
-         WHERE device_id = ? AND alert_type = 'low_games'
-         AND created_at > DATE_SUB(NOW(), INTERVAL 4 HOUR)`,
-        [device.device_id]
-      );
-
-      if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
-        const emailText = 'Device ' + device.device_name + ' Low Games Alert\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nGames Remaining: ' + device.games_available + '\nRevenue Today: Ksh ' + (device.today_revenue || 0) + '\n\nAdd games from your dashboard to avoid running out!\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
-        await sendEmail(device.email, 'Device ' + device.device_name + ' low games alert', emailText);
-      }
-    }
-
-    // Low battery alert
-    const [lowBatteryDevices] = await db.query(`
-      SELECT d.*, u.email, u.full_name
-      FROM cuepay_devices d
-      LEFT JOIN cuepay_users u ON d.owner_id = u.id
-      WHERE d.battery_voltage <= 10.5 AND d.battery_voltage > 0
-        AND d.status = 'online'
-    `);
-
-    for (const device of lowBatteryDevices) {
-      const [recentAlerts] = await db.query(
-        `SELECT id FROM cuepay_alert_history
-         WHERE device_id = ? AND alert_type = 'low_battery'
-         AND created_at > DATE_SUB(NOW(), INTERVAL 6 HOUR)`,
-        [device.device_id]
-      );
-
-      if (recentAlerts.length === 0 && isBusinessHours() && device.email) {
-        const batteryText = 'Device ' + device.device_name + ' Low Battery Warning\n\nDevice: ' + device.device_name + ' (' + device.device_id + ')\nBattery Voltage: ' + device.battery_voltage + 'V\n\nPlease charge the device soon to avoid interruption.\n\nView dashboard: https://ardthonsolutions.com/cuepay/dashboard';
-        await sendEmail(device.email, 'Device ' + device.device_name + ' battery warning', batteryText);
-      }
-    }
-
-  } catch(err) {
-    console.error('Alert system error:', err.message);
-  }
-}, 60000); // Check every 60 seconds
-
-
-// Reset device daily stats at midnight
-setInterval(async () => {
-  const now = new Date();
-  if (now.getHours() === 0 && now.getMinutes() <= 1) {
-    try {
-      await db.query(`
-        UPDATE cuepay_devices
-        SET today_revenue = 0, today_games = 0
-        WHERE last_sync < DATE_SUB(NOW(), INTERVAL 1 HOUR)
-      `);
-      console.log('Midnight reset: cleared today stats');
-    } catch(err) {
-      console.error('Midnight reset error:', err.message);
-    }
-  }
-}, 60000); // Check every minute
-
-// ===== PWA PUSH NOTIFICATIONS =====
-
-// Store push subscriptions
-app.post('/api/push/subscribe', async (req, res) => {
-  try {
-    const subscription = req.body;
-    const userId = req.session.cuepayUser ? req.session.cuepayUser.id : null;
-
-    // Store subscription (create table if needed)
-    await db.query(`CREATE TABLE IF NOT EXISTS push_subscriptions (
-      id int NOT NULL AUTO_INCREMENT,
-      user_id int,
-      subscription json NOT NULL,
-      created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-
-    await db.query('INSERT INTO push_subscriptions (user_id, subscription) VALUES (?, ?)',
-      [userId, JSON.stringify(subscription)]);
-
-    res.json({ success: true });
-  } catch(err) {
-    res.status(500).json({ error: 'Failed to subscribe' });
-  }
-});
-
-// Send push notification to all subscribers
-async function sendPushNotification(title, body, url = '/cuepay/dashboard') {
-  try {
-    const [subscriptions] = await db.query('SELECT subscription FROM push_subscriptions');
-
-    for (const sub of subscriptions) {
-      const subscription = JSON.parse(sub.subscription);
-      // You would use web-push library here
-      // For now, this is the structure
-    }
-  } catch(err) {
-    console.error('Push notification error:', err);
-  }
-}
-// ============================================
-// HEALTH MONITORING SYSTEM
-// ============================================
-
-// Display health readings page
-app.get('/health', async (req, res) => {
-  try {
-    const [readings] = await db.query(
-      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 50'
-    );
-
-    // Get latest reading
-    const [latest] = await db.query(
-      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 1'
-    );
-
-    // Get stats
-    const [stats] = await db.query(
-      `SELECT
-        AVG(spo2) as avg_spo2,
-        AVG(temperature) as avg_temp,
-        AVG(heart_rate) as avg_hr,
-        MIN(heart_rate) as min_hr,
-        MAX(heart_rate) as max_hr,
-        COUNT(*) as total_readings
-       FROM health_readings
-       WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
-    );
-
-    res.render('health', {
-      title: 'Health Monitoring - Ardthon Solutions',
-      readings,
-      latest: latest[0] || null,
-      stats: stats[0] || {},
-      user: req.session.user || null
-    });
-  } catch(err) {
-    console.error('Health page error:', err);
-    res.render('health', {
-      title: 'Health Monitoring',
-      readings: [],
-      latest: null,
-      stats: {},
-      user: req.session.user || null
-    });
-  }
-});
-
-// API: Receive health data from ESP32/device
-app.post('/health/api/submit', async (req, res) => {
-  try {
-    const { device_id, spo2, temperature, heart_rate } = req.body;
-
-    if (!device_id) {
-      return res.status(400).json({ error: 'device_id required' });
-    }
-
-    await db.query(
-      'INSERT INTO health_readings (device_id, spo2, temperature, heart_rate) VALUES (?, ?, ?, ?)',
-      [device_id, parseFloat(spo2) || 0, parseFloat(temperature) || 0, parseInt(heart_rate) || 0]
-    );
-
-    res.json({ status: 'success', message: 'Reading recorded' });
-  } catch(err) {
-    console.error('Health API error:', err);
-    res.status(500).json({ error: 'Failed to save reading' });
-  }
-});
-
-// API: Get latest health data (for auto-refresh)
-app.get('/health/api/latest', async (req, res) => {
-  try {
-    const [latest] = await db.query(
-      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 1'
-    );
-
-    const [recent] = await db.query(
-      'SELECT * FROM health_readings ORDER BY recorded_at DESC LIMIT 20'
-    );
-
-    const [stats] = await db.query(
-      `SELECT
-        AVG(spo2) as avg_spo2,
-        AVG(temperature) as avg_temp,
-        AVG(heart_rate) as avg_hr,
-        MIN(heart_rate) as min_hr,
-        MAX(heart_rate) as max_hr
-       FROM health_readings
-       WHERE recorded_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
-    );
-
-    res.json({
-      latest: latest[0] || null,
-      recent: recent.reverse(),
-      stats: stats[0] || {}
-    });
-  } catch(err) {
-    res.status(500).json({ error: 'Failed to get data' });
-  }
-});
-
-// ============================================
-// M-PESA DARAJA INTEGRATION (Complete)
+// M-PESA DARAJA INTEGRATION
 // ============================================
 
 const mpesa = require('./modules/mpesa');
 
-// STK Push - Initiate payment
 app.post('/spinspg/api/mpesa/stkpush', isSpinAuth, async (req, res) => {
   try {
     const { phone_number, amount, order_number, device_id } = req.body;
@@ -3787,7 +3530,6 @@ app.post('/spinspg/api/mpesa/stkpush', isSpinAuth, async (req, res) => {
   }
 });
 
-// STK Push Query
 app.post('/spinspg/api/mpesa/query', isSpinAuth, async (req, res) => {
   try {
     const result = await mpesa.stkPushQuery(req.body.checkout_request_id);
@@ -3797,7 +3539,6 @@ app.post('/spinspg/api/mpesa/query', isSpinAuth, async (req, res) => {
   }
 });
 
-// M-PESA Callback (Auto-confirm payment)
 app.post('/spinspg/api/mpesa/callback', async (req, res) => {
   try {
     const stkCallback = req.body.Body?.stkCallback;
@@ -3835,12 +3576,10 @@ app.post('/spinspg/api/mpesa/callback', async (req, res) => {
   }
 });
 
-// C2B Validation
 app.get('/spinspg/api/mpesa/callback/validation', (req, res) => {
   res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
 });
 
-// C2B Confirmation (Paybill/Till direct payment)
 app.post('/spinspg/api/mpesa/callback/confirmation', async (req, res) => {
   try {
     const { TransID, TransAmount, BillRefNumber, MSISDN, TransTime } = req.body;
@@ -3855,7 +3594,6 @@ app.post('/spinspg/api/mpesa/callback/confirmation', async (req, res) => {
   }
 });
 
-// M-PESA Settings Page
 app.get('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
   try {
     const userId = req.session.spinUser.id;
@@ -3870,7 +3608,6 @@ app.get('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
   }
 });
 
-// Save M-PESA Settings
 app.post('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
   try {
     const { business_shortcode, consumer_key, consumer_secret, passkey, account_type } = req.body;
@@ -3887,7 +3624,6 @@ app.post('/spinspg/mpesa-settings', isSpinAuth, async (req, res) => {
   }
 });
 
-// Register C2B URLs
 app.post('/spinspg/mpesa/register-urls', isSpinAuth, async (req, res) => {
   const result = await mpesa.registerC2BUrls();
   if (result.success) req.flash('success_msg', 'C2B URLs registered!');
@@ -3896,158 +3632,22 @@ app.post('/spinspg/mpesa/register-urls', isSpinAuth, async (req, res) => {
 });
 
 // ============================================
-// END M-PESA DARAJA INTEGRATION
+// 404 & ERROR HANDLERS
 // ============================================
 
-
-// ============================================
-// SPINSPRING ROUTES - Add these to your server.js
-// ============================================
-
-// SpinSpring Landing Page
-app.get('/spinspring', (req, res) => {
-    res.render('spinspring/landing', { 
-        title: 'SpinSpring - Smart Laundry Automation',
-        user: null 
-    });
-});
-
-// SpinSpring Login Pages
-app.get('/spinspring/login', (req, res) => {
-    res.render('spinspring/login', { 
-        title: 'Login - SpinSpring',
-        error: null 
-    });
-});
-
-app.get('/spinspring/register', (req, res) => {
-    res.render('spinspring/register', { 
-        title: 'Register - SpinSpring',
-        error: null 
-    });
-});
-
-// Role-specific Logins
-app.get('/spinspring/owner-login', (req, res) => {
-    res.render('spinspring/owner-login', { 
-        title: 'Owner Login - SpinSpring',
-        error: null 
-    });
-});
-
-app.get('/spinspring/attendant-login', (req, res) => {
-    res.render('spinspring/attendant-login', { 
-        title: 'Attendant Login - SpinSpring',
-        error: null 
-    });
-});
-
-app.get('/spinspring/customer-login', (req, res) => {
-    res.render('spinspring/customer-login', { 
-        title: 'Customer Login - SpinSpring',
-        error: null 
-    });
-});
-
-// SpinSpring Dashboards
-app.get('/spinspring/owner-dashboard', (req, res) => {
-    res.render('spinspring/owner-dashboard', { 
-        title: 'Owner Dashboard - SpinSpring',
-        user: { name: 'Owner', role: 'owner' }
-    });
-});
-
-app.get('/spinspring/attendant-dashboard', (req, res) => {
-    res.render('spinspring/attendant-dashboard', { 
-        title: 'Attendant Dashboard - SpinSpring',
-        user: { name: 'Attendant', role: 'attendant' }
-    });
-});
-
-app.get('/spinspring/customer-dashboard', (req, res) => {
-    res.render('spinspring/customer-dashboard', { 
-        title: 'Customer Dashboard - SpinSpring',
-        user: { name: 'Customer', role: 'customer' }
-    });
-});
-
-// SpinSpring Device Management
-app.get('/spinspring/register-device', (req, res) => {
-    res.render('spinspring/register-device', { 
-        title: 'Register Device - SpinSpring',
-        error: null 
-    });
-});
-
-app.get('/spinspring/device-detail/:id', (req, res) => {
-    const deviceId = req.params.id;
-    res.render('spinspring/device-detail', { 
-        title: 'Device Detail - SpinSpring',
-        device: { 
-            id: deviceId, 
-            name: `Machine ${deviceId}`, 
-            status: 'Active' 
-        }
-    });
-});
-
-app.get('/spinspring/settings', (req, res) => {
-    res.render('spinspring/settings', { 
-        title: 'Settings - SpinSpring',
-        user: { name: 'User' }
-    });
-});
-
-// SpinSpring API Routes
-app.get('/api/spinspring/machines', (req, res) => {
-    res.json({ 
-        success: true,
-        machines: [
-            { id: 1, name: 'Machine 1', status: 'active', location: 'Laundry A' },
-            { id: 2, name: 'Machine 2', status: 'idle', location: 'Laundry B' },
-            { id: 3, name: 'Machine 3', status: 'active', location: 'Laundry A' },
-            { id: 4, name: 'Machine 4', status: 'maintenance', location: 'Laundry C' }
-        ]
-    });
-});
-
-app.get('/api/spinspring/stats', (req, res) => {
-    res.json({
-        success: true,
-        stats: {
-            machines: 4,
-            cycles: 156,
-            businesses: 3,
-            uptime: '99.8%'
-        }
-    });
-});
-
-app.post('/api/spinspring/register-device', (req, res) => {
-    // Device registration logic
-    res.json({ 
-        success: true, 
-        message: 'Device registered successfully',
-        device: req.body 
-    });
-});
-
-// ============================================
-// END SPINSPRING ROUTES
-// ============================================
-
-// 404
 app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
 });
 
-// Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.message);
   res.status(500).render('error', { title: 'Server Error', message: 'Something went wrong', error: {} });
 });
 
-// Start server
+// ============================================
+// START SERVER
+// ============================================
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
